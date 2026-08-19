@@ -30,8 +30,10 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
       -o /out/edgedeck ./cmd/edgedeck
 
 FROM alpine:3.21
-RUN apk add --no-cache ca-certificates tzdata && \
-    mkdir -p /data
+# iptables нужен только режиму --firewall: он читает цепочки DOCKER-USER и INPUT,
+# чтобы панель могла честно сказать, видно ли порт из интернета.
+RUN apk add --no-cache ca-certificates tzdata iptables && \
+    mkdir -p /data /state
 COPY --from=build /out/edgedeck /usr/local/bin/edgedeck
 ENV EDGEDECK_LISTEN=:4000
 # Порт не публикуется наружу: снаружи в панель попадают только через Caddy.
