@@ -75,6 +75,27 @@ jobs:
             VERSION=sha-${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      # Пакет в GHCR приватный, и для его скачивания нужен токен с read:packages.
+      # Пока такого нет, тот же образ выкладывается файлом: артефакт сборки
+      # доступен по обычным правам на репозиторий (gh run download).
+      - name: образ файлом (arm64)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/arm64
+          push: false
+          outputs: type=docker,dest=/tmp/edgedeck-arm64.tar
+          tags: ${{ env.IMAGE }}:main
+          build-args: |
+            VERSION=sha-${{ github.sha }}
+          cache-from: type=gha
+      - uses: actions/upload-artifact@v4
+        with:
+          name: edgedeck-arm64
+          path: /tmp/edgedeck-arm64.tar
+          retention-days: 14
+          compression-level: 0
+
       - name: что собралось
         run: |
           echo "Теги:"
