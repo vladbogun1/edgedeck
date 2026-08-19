@@ -89,7 +89,9 @@ func (s *Store) Seen(configured []string) []SeenDomain {
 	defer s.mu.Unlock()
 	out := make([]SeenDomain, 0, len(s.seen))
 	for host, d := range s.seen {
-		if skip[host] {
+		// Голые адреса отсекаем и на чтении: в файле могли остаться записи,
+		// сделанные до этой проверки.
+		if skip[host] || net.ParseIP(host) != nil {
 			continue
 		}
 		out = append(out, *d)

@@ -40,10 +40,21 @@ bash install.sh
 
 Скрипт создаст `.env` со случайными токенами и стартовым паролем, поправит
 `Caddyfile` (с копией), поставит обработчик по умолчанию и поднимет панель.
-Репозиторий приватный, поэтому образу нужен доступ:
+Репозиторий и пакет приватные, поэтому образ нужно откуда-то взять. Два способа:
+
+**Токен с `read:packages`** — обычный путь:
 
 ```bash
 echo "$GITHUB_TOKEN_WITH_READ_PACKAGES" | docker login ghcr.io -u vladbogun1 --password-stdin
+```
+
+**Артефакт сборки** — если такого токена нет: тот же образ CI выкладывает файлом,
+и он качается по обычным правам на репозиторий.
+
+```bash
+gh run download --repo vladbogun1/edgedeck -n edgedeck-arm64
+scp edgedeck-arm64.tar ubuntu@СЕРВЕР:/tmp/
+ssh ubuntu@СЕРВЕР 'docker load -i /tmp/edgedeck-arm64.tar && cd ~/edgedeck && docker compose up -d'
 ```
 
 ## Обновление

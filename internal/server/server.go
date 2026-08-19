@@ -13,6 +13,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -69,7 +70,7 @@ func Run(ctx context.Context, cfg config.Config) error {
 		auth:   authStore,
 		state:  state.NewStore(cfg.SeenDomainsFile(), cfg.AuditFile()),
 		docker: dockerinfo.New(cfg.AgentURL, os.Getenv("EDGEDECK_AGENT_TOKEN"), edgeNetworkName()),
-		caddy:  caddyx.New(cfg.CaddyAdminURL, cfg.CaddyDataDir),
+		caddy:  caddyx.New(cfg.CaddyAdminURL, cfg.CaddyDataDir, filepath.Join(cfg.EdgeDir, "certs")),
 		ports:  hostports.New(cfg.HostProcDir),
 		net:    netcheck.New(cfg.PublicIP),
 		tlsAsk: newAskLimiter(cfg.TLSAskLimit),

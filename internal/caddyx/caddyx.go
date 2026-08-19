@@ -27,13 +27,18 @@ import (
 type Client struct {
 	adminURL string
 	dataDir  string
+	// certsDir — каталог явных сертификатов-файлов (~/edge/certs). Там лежит
+	// самоподписанный сертификат для захода по IP: Let's Encrypt на адреса их
+	// не выдаёт (DESIGN.md §2.22), поэтому в caddy_data его нет.
+	certsDir string
 	http     *http.Client
 }
 
-func New(adminURL, dataDir string) *Client {
+func New(adminURL, dataDir, certsDir string) *Client {
 	return &Client{
 		adminURL: strings.TrimRight(adminURL, "/"),
 		dataDir:  dataDir,
+		certsDir: certsDir,
 		http:     &http.Client{Timeout: 30 * time.Second},
 	}
 }
@@ -111,11 +116,26 @@ type Certificate struct {
 // Каталог смонтирован только на чтение: удалить сертификаты панель не может
 // физически — у Let's Encrypt лимит на повторный выпуск (DESIGN.md §2.8).
 func (c *Client) Certificates() ([]Certificate, error) {
-	root := filepath.Join(c.dataDir, "caddy", "certificates")
-	if _, err := os.Stat(root); err != nil {
-		return nil, fmt.Errorf("том с сертификатами не смонтирован (%s)", root)
-	}
 	var out []Certificate
+	if c.certsDir != "" {
+		if entries, derr := os.ReadDir(c.certsDir); derr == nil {
+			for _, e := range entries {
+				if e.IsDir() || !strings.HasSuffix(e.Name(), ".crt") {
+					continue
+				}
+				if cert, perr := parseCert(filepath.Join(c.certsDir, e.Name())); perr == nil {
+					cert.SelfSign = true
+					out = append(out, cert)
+				}
+			}
+		}
+	}
+	// Явные сертификаты уже собраны; том Caddy может быть и не смонтирован —
+	// тогда отдаём то, что есть, вместе с объяснением.
+	root := filepath.Join(c.dataDir, "caddy", "certificates")
+	if _, statErr := os.Stat(root); statErr != nil {
+		return out, fmt.Errorf("том с сертификатами Caddy не смонтирован (%s)", root)
+	}
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".crt") {
 			return nil

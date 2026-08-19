@@ -33,6 +33,12 @@ type Port struct {
 	// но и из контейнера не видно тоже (DESIGN.md §2.4).
 	LoopbackOnly bool `json:"loopback_only"`
 
+	// Guess — что это, скорее всего, за служба. Нужно потому, что имя процесса
+	// панели не видно: чтобы его прочитать, контейнеру пришлось бы дать
+	// pid: host и CAP_SYS_PTRACE, а таких прав панель себе не берёт
+	// (DESIGN.md §2.26).
+	Guess string `json:"guess"`
+
 	// inodeCache — инод сокета, по которому ищем процесс-владелец.
 	// Не экспортируется, значит в JSON не попадает.
 	inodeCache uint64
@@ -45,6 +51,16 @@ type Reader struct {
 	cache  []Port
 	cached time.Time
 	ttl    time.Duration
+}
+
+// wellKnown — минимальный справочник, чтобы список портов не был безымянным.
+// Только то, что реально встречается на этих серверах.
+var wellKnown = map[int]string{
+	22: "SSH", 25: "почта", 53: "DNS", 67: "DHCP", 68: "DHCP", 111: "rpcbind",
+	123: "NTP", 443: "HTTPS", 80: "HTTP", 1194: "OpenVPN", 2375: "Docker API",
+	2376: "Docker API (TLS)", 3306: "MySQL", 5432: "PostgreSQL", 6379: "Redis",
+	8080: "веб-приложение", 9100: "node_exporter", 8429: "vmagent",
+	25565: "Minecraft", 25575: "Minecraft RCON", 27017: "MongoDB",
 }
 
 func New(procDir string) *Reader {
@@ -113,6 +129,9 @@ func (r *Reader) List() ([]Port, error) {
 	}
 	out := make([]Port, 0, len(dedup))
 	for _, p := range dedup {
+		if p.Process == "" {
+			p.Guess = wellKnown[p.Port]
+		}
 		out = append(out, p)
 	}
 	sort.Slice(out, func(i, j int) bool {

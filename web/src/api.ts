@@ -88,6 +88,7 @@ export type HostPort = {
   cmdline: string;
   is_docker: boolean;
   loopback_only: boolean;
+  guess: string;
   container: string;
 };
 

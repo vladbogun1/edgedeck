@@ -27,7 +27,9 @@ export function PortsView() {
   return (
     <div className="space-y-3">
       <p className="text-xs text-muted">
-        Порты, опубликованные докером, <b>не</b> закрываются ufw: трафик идёт через DNAT в цепочку FORWARD, а ufw
+        Имя процесса вне докера панель не показывает намеренно: чтобы его прочитать, контейнеру нужны{" "}
+        <code>pid: host</code> и <code>CAP_SYS_PTRACE</code>, а таких прав панель себе не берёт. Порты, опубликованные
+        докером, <b>не</b> закрываются ufw: трафик идёт через DNAT в цепочку FORWARD, а ufw
         фильтрует INPUT. Ограничить такой порт можно только правилом в DOCKER-USER. Панель фаервол не меняет — она
         показывает картину.
       </p>
@@ -37,7 +39,9 @@ export function PortsView() {
             <span className="w-20 font-mono">
               {p.port}/{p.proto}
             </span>
-            <span className="text-sm">{p.container || p.process || "неизвестный процесс"}</span>
+            <span className="text-sm">
+              {p.container || p.process || (p.guess ? `похоже на ${p.guess}` : "процесс на хосте")}
+            </span>
             {p.is_docker && !p.container && <span className="text-xs text-muted">порт контейнера</span>}
             {p.pid > 0 && !p.is_docker && <span className="text-xs text-muted">pid {p.pid}</span>}
             <span className="ml-auto text-xs">
