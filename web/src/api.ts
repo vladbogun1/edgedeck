@@ -99,6 +99,13 @@ export type Event = {
   message: string;
 };
 
+// Публичная витрина: наружу отдаются только имена доменов и признак «отвечает».
+export type PublicSite = {
+  domain: string;
+  kind: string;
+  online: boolean;
+};
+
 export class Unauthorized extends Error {}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -114,6 +121,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  publicSites: () => request<{ sites: PublicSite[] }>("/api/public/sites"),
   session: () => request<{ authenticated: boolean }>("/api/session"),
   login: (password: string) =>
     request<{ ok: boolean }>("/api/login", { method: "POST", body: JSON.stringify({ password }) }),

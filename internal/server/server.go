@@ -39,6 +39,7 @@ type app struct {
 	net    *netcheck.Checker
 
 	tlsAsk *askLimiter
+	public *publicCache
 }
 
 func Run(ctx context.Context, cfg config.Config) error {
@@ -74,6 +75,7 @@ func Run(ctx context.Context, cfg config.Config) error {
 		ports:  hostports.New(cfg.HostProcDir),
 		net:    netcheck.New(cfg.PublicIP),
 		tlsAsk: newAskLimiter(cfg.TLSAskLimit),
+		public: newPublicCache(),
 	}
 
 	mux := http.NewServeMux()
@@ -122,6 +124,9 @@ func (a *app) routes(mux *http.ServeMux) {
 	// Разрешение на выпуск сертификата для незнакомого домена. Спрашивает Caddy,
 	// токен в пути — чтобы этот путь нельзя было позвать снаружи (DESIGN.md §7).
 	mux.HandleFunc("GET /internal/tls-ask/{token}", a.handleTLSAsk)
+
+	// Витрина сайтов — до всякого входа (DESIGN.md §9.1).
+	mux.HandleFunc("GET /api/public/sites", a.handlePublicSites)
 
 	mux.HandleFunc("POST /api/login", a.handleLogin)
 	mux.HandleFunc("POST /api/logout", a.handleLogout)
