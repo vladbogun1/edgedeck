@@ -1,0 +1,25 @@
+@import "tailwindcss";
+
+/* Панель открывают, когда что-то не работает: спокойный тёмный фон, плотные
+   списки, никаких анимаций ради анимаций. */
+@theme {
+  --color-ink: #0d0f14;
+  --color-panel: #151922;
+  --color-panel-2: #1c2230;
+  --color-line: #262d3d;
+  --color-text: #e6e9f0;
+  --color-muted: #8c95a8;
+  --color-ok: #3ddc97;
+  --color-warn: #f5c451;
+  --color-bad: #ff6b6b;
+  --color-accent: #6aa5ff;
+}
+
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  background: var(--color-ink);
+  color: var(--color-text);
+  font-family: ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}

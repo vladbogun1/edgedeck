@@ -1,0 +1,11 @@
+# сборка
+/internal/webui/dist/*
+!/internal/webui/dist/index.html
+/web/dist/
+/web/node_modules/
+/bin/
+
+# локальное
+*.log
+.env
+.DS_Store

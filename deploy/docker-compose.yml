@@ -1,0 +1,67 @@
+# EdgeDeck на сервере. Этот файл — единственное, что лежит в ~/edgedeck:
+# исходников на сервере нет, образ тянется из GHCR (DESIGN.md §11.1).
+#
+#   cd ~/edgedeck && docker compose pull && docker compose up -d
+#
+# Наружу ничего не публикуется: в панель попадают только через Caddy.
+
+name: edgedeck
+
+services:
+  # Сайдкар с доступом к Docker. Белый список из шести операций, docker.sock
+  # смонтирован только сюда и только на чтение.
+  agent:
+    image: ${EDGEDECK_IMAGE}
+    container_name: edgedeck-agent
+    command: ["--agent"]
+    restart: unless-stopped
+    environment:
+      EDGEDECK_AGENT_TOKEN: ${EDGEDECK_AGENT_TOKEN}
+      EDGEDECK_EDGE_NETWORK: ${EDGEDECK_EDGE_NETWORK:-edge}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [edge]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4001/healthz"]
+      interval: 30s
+      timeout: 5s
+    logging: &logs
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  panel:
+    image: ${EDGEDECK_IMAGE}
+    container_name: edgedeck
+    restart: unless-stopped
+    depends_on: [agent]
+    environment:
+      EDGEDECK_AGENT_URL: http://edgedeck-agent:4001
+      EDGEDECK_AGENT_TOKEN: ${EDGEDECK_AGENT_TOKEN}
+      EDGEDECK_TLS_ASK_TOKEN: ${EDGEDECK_TLS_ASK_TOKEN}
+      EDGEDECK_CADDY_ADMIN: ${EDGEDECK_CADDY_ADMIN:-http://edge_caddy:2019}
+      EDGEDECK_EDGE_NETWORK: ${EDGEDECK_EDGE_NETWORK:-edge}
+      EDGEDECK_PUBLIC_IP: ${EDGEDECK_PUBLIC_IP:-}
+      EDGEDECK_INITIAL_PASSWORD: ${EDGEDECK_INITIAL_PASSWORD:-}
+    volumes:
+      # Каталог Caddy: на этапе 0 только читаем, дальше будем писать routes.yaml.
+      - ${EDGE_DIR:-/home/ubuntu/edge}:/edge
+      # Своё состояние: пароль, сессии, замеченные домены, журнал.
+      - ./data:/data
+      # /proc хоста — чтобы видеть порты процессов вне докера.
+      - /proc:/host/proc:ro
+      # Сертификаты Caddy: только чтение, удалить их панель не может физически.
+      - caddy_data:/caddy-data:ro
+    networks: [edge]
+    logging: *logs
+
+networks:
+  edge:
+    external: true
+    name: ${EDGEDECK_EDGE_NETWORK:-edge}
+
+volumes:
+  caddy_data:
+    external: true
+    name: ${CADDY_DATA_VOLUME:-edge_caddy_data}
