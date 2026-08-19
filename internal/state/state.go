@@ -57,9 +57,10 @@ func NewStore(seenFile, auditFile string) *Store {
 // Порт и регистр отбрасываем: «Example.COM:443» и «example.com» — одно и то же.
 func (s *Store) NoteHost(host string, tlsAsked, tlsAllowed bool) {
 	host = normalizeHost(host)
-	// Голые адреса не домены: заход по IP и обращения внутри docker-сетей в
-	// списке «пришли, но не настроены» только мешают — маршрут на них не создать.
-	if host == "" || net.ParseIP(host) != nil {
+	// Голые адреса и внутренние имена — не домены: заход по IP, обращения между
+	// контейнерами (edge_caddy) и проверки самой панели в списке «пришли, но не
+	// настроены» только мешают, маршрут на них всё равно не создать.
+	if host == "" || net.ParseIP(host) != nil || !strings.Contains(host, ".") {
 		return
 	}
 	now := time.Now()
@@ -91,7 +92,7 @@ func (s *Store) Seen(configured []string) []SeenDomain {
 	for host, d := range s.seen {
 		// Голые адреса отсекаем и на чтении: в файле могли остаться записи,
 		// сделанные до этой проверки.
-		if skip[host] || net.ParseIP(host) != nil {
+		if skip[host] || net.ParseIP(host) != nil || !strings.Contains(host, ".") {
 			continue
 		}
 		out = append(out, *d)
