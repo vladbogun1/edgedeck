@@ -285,3 +285,39 @@ func firstOr(list []string, def string) string {
 	}
 	return def
 }
+
+// Host — сведения о сервере от самого Docker.
+//
+// Нужны из-за неочевидного: /proc/sys/kernel/hostname зависит от UTS-namespace,
+// поэтому даже через смонтированный /proc хоста контейнер читает СВОЁ имя.
+// Docker же знает настоящее имя машины.
+type Host struct {
+	Name          string `json:"name"`
+	CPUs          int    `json:"cpus"`
+	MemTotalMB    int    `json:"mem_total_mb"`
+	DockerVersion string `json:"docker_version"`
+	OS            string `json:"os"`
+	Architecture  string `json:"architecture"`
+}
+
+func (c *Client) Info(ctx context.Context) (Host, error) {
+	var raw struct {
+		Name          string `json:"Name"`
+		NCPU          int    `json:"NCPU"`
+		MemTotal      int64  `json:"MemTotal"`
+		ServerVersion string `json:"ServerVersion"`
+		OperatingSyst string `json:"OperatingSystem"`
+		Architecture  string `json:"Architecture"`
+	}
+	if err := c.get(ctx, "/v1/info", &raw); err != nil {
+		return Host{}, err
+	}
+	return Host{
+		Name:          raw.Name,
+		CPUs:          raw.NCPU,
+		MemTotalMB:    int(raw.MemTotal / (1024 * 1024)),
+		DockerVersion: raw.ServerVersion,
+		OS:            raw.OperatingSyst,
+		Architecture:  raw.Architecture,
+	}, nil
+}

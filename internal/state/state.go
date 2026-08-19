@@ -7,6 +7,7 @@ package state
 
 import (
 	"encoding/json"
+	"net"
 	"os"
 	"sort"
 	"strings"
@@ -56,7 +57,9 @@ func NewStore(seenFile, auditFile string) *Store {
 // Порт и регистр отбрасываем: «Example.COM:443» и «example.com» — одно и то же.
 func (s *Store) NoteHost(host string, tlsAsked, tlsAllowed bool) {
 	host = normalizeHost(host)
-	if host == "" {
+	// Голые адреса не домены: заход по IP и обращения внутри docker-сетей в
+	// списке «пришли, но не настроены» только мешают — маршрут на них не создать.
+	if host == "" || net.ParseIP(host) != nil {
 		return
 	}
 	now := time.Now()

@@ -45,10 +45,14 @@ https:// {
 	}
 }
 
-# Заход по IP: Let's Encrypt для адресов сертификатов не выдаёт, поэтому здесь
-# свой, самоподписанный. Браузер предупредит — это ожидаемо.
+# Заход по IP. Let's Encrypt сертификаты для адресов не выдаёт совсем
+# («Default profile does not permit IP address identifiers»), поэтому здесь
+# явный самоподписанный сертификат из ~/edge/certs — его сделал установщик.
+# Именно явный файл, а не `tls internal`: внутренний CA рядом с on-demand на том
+# же порту приводил к висящему рукопожатию для соединений без SNI, а браузеры
+# для IP-адресов SNI не отправляют.
 https://__SERVER_IP__ {
-	tls internal
+	tls /etc/caddy/certs/ip.crt /etc/caddy/certs/ip.key
 	reverse_proxy edgedeck:4000 {
 		header_up X-Real-IP {remote_host}
 	}

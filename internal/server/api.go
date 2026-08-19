@@ -248,9 +248,16 @@ func (a *app) handleOverview(w http.ResponseWriter, r *http.Request) {
 	alive, aliveMsg := a.caddy.Alive(r.Context())
 	publicIP, _ := a.net.PublicIP(r.Context())
 
+	// Имя сервера спрашиваем у Docker: /proc/sys/kernel/hostname зависит от
+	// UTS-namespace и даже через /proc хоста отдаёт имя контейнера.
+	name := hostname(a.cfg.HostProcDir)
+	if host, err := a.docker.Info(r.Context()); err == nil && host.Name != "" {
+		name = host.Name
+	}
+
 	ov := overview{
 		Server: serverInfo{
-			Hostname: hostname(a.cfg.HostProcDir),
+			Hostname: name,
 			PublicIP: publicIP,
 			Version:  version.Version,
 		},
