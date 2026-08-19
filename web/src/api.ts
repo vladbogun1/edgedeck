@@ -106,6 +106,55 @@ export type PublicSite = {
   online: boolean;
 };
 
+// ---- маршруты (этап 1) ----
+
+export type Target = { kind: "container" | "host" | "external"; name?: string; port?: number; url?: string };
+
+export type Route = {
+  domain: string;
+  aliases?: string[];
+  path?: string;
+  type: "proxy" | "static" | "redirect" | "acme_only" | "stub";
+  target?: Target | null;
+  redirect_to?: string;
+  max_upload?: string;
+  read_timeout?: string;
+  security_headers?: boolean;
+  hsts?: boolean;
+  hide_upstream_csp?: boolean;
+  csp?: string;
+  allow_ips?: string[];
+  deny_paths?: string[];
+  comment?: string;
+};
+
+export type RouteView = Route & { id: string; target_addr: string };
+
+export type ManualFile = {
+  file: string;
+  addresses: string[];
+  targets: string[];
+  can_import: boolean;
+  why_not?: string;
+  is_default: boolean;
+};
+
+export type Change = { kind: "create" | "update" | "delete" | "unchanged"; file: string; before?: string; after?: string };
+
+export type Plan = { changes: Change[]; warnings?: string[]; valid: boolean; error?: string };
+
+export type ApplyResult = {
+  applied: boolean;
+  rolled_back: boolean;
+  snapshot?: string;
+  before: Record<string, string>;
+  after: Record<string, string>;
+  message: string;
+  changes: Change[];
+};
+
+export type Snapshot = { name: string; time: string; actor: string; reason: string; files: number };
+
 export class Unauthorized extends Error {}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -152,6 +201,21 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ container, detach }),
     }),
+  routes: () => request<{ routes: RouteView[] | null; manual: ManualFile[] | null; file_path: string }>("/api/routes"),
+  routePlan: (route: Route, id = "", adopt = "") =>
+    request<Plan>("/api/routes/save", {
+      method: "POST",
+      body: JSON.stringify({ id, route, adopt, dry_run: true }),
+    }),
+  routeSave: (route: Route, id = "", adopt = "") =>
+    request<ApplyResult>("/api/routes/save", { method: "POST", body: JSON.stringify({ id, route, adopt }) }),
+  routeDelete: (id: string) =>
+    request<ApplyResult>("/api/routes/delete", { method: "POST", body: JSON.stringify({ id }) }),
+  routeImport: (file: string) =>
+    request<ApplyResult>("/api/routes/import", { method: "POST", body: JSON.stringify({ file }) }),
+  snapshots: () => request<{ snapshots: Snapshot[] | null }>("/api/snapshots"),
+  rollback: (name: string) =>
+    request<{ ok: boolean; message: string }>("/api/rollback", { method: "POST", body: JSON.stringify({ name }) }),
   forgetDomain: (domain: string) =>
     request<{ ok: boolean }>("/api/forget-domain", { method: "POST", body: JSON.stringify({ domain }) }),
 };

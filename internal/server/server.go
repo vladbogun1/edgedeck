@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/vladbogun1/edgedeck/internal/apply"
 	"github.com/vladbogun1/edgedeck/internal/auth"
 	"github.com/vladbogun1/edgedeck/internal/caddyx"
 	"github.com/vladbogun1/edgedeck/internal/config"
@@ -38,8 +39,9 @@ type app struct {
 	ports  *hostports.Reader
 	net    *netcheck.Checker
 
-	tlsAsk *askLimiter
-	public *publicCache
+	tlsAsk  *askLimiter
+	public  *publicCache
+	applier *apply.Applier
 }
 
 func Run(ctx context.Context, cfg config.Config) error {
@@ -76,6 +78,12 @@ func Run(ctx context.Context, cfg config.Config) error {
 		net:    netcheck.New(cfg.PublicIP),
 		tlsAsk: newAskLimiter(cfg.TLSAskLimit),
 		public: newPublicCache(),
+	}
+	a.applier = &apply.Applier{
+		EdgeDir:     cfg.EdgeDir,
+		SnapshotDir: filepath.Join(cfg.DataDir, "snapshots"),
+		Caddy:       a.caddy,
+		CaddyHost:   caddyHostName(cfg.CaddyAdminURL),
 	}
 
 	mux := http.NewServeMux()
@@ -187,6 +195,19 @@ func clientIP(r *http.Request) string {
 		return r.RemoteAddr
 	}
 	return host
+}
+
+// caddyHostName вытаскивает имя контейнера прокси из адреса admin API:
+// «http://edge_caddy:2019» → «edge_caddy». Через это имя идут проверки доменов.
+func caddyHostName(adminURL string) string {
+	s := strings.TrimPrefix(strings.TrimPrefix(adminURL, "http://"), "https://")
+	if i := strings.Index(s, ":"); i > 0 {
+		s = s[:i]
+	}
+	if s == "" {
+		return "edge_caddy"
+	}
+	return s
 }
 
 func edgeNetworkName() string {

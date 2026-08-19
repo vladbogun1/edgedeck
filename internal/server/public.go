@@ -40,6 +40,14 @@ func newPublicCache() *publicCache {
 	return &publicCache{ttl: 60 * time.Second}
 }
 
+// invalidate сбрасывает кеш витрины: после применения изменений список сайтов
+// должен обновиться сразу, а не через минуту.
+func (c *publicCache) invalidate() {
+	c.mu.Lock()
+	c.sites, c.fetched = nil, time.Time{}
+	c.mu.Unlock()
+}
+
 func (a *app) handlePublicSites(w http.ResponseWriter, r *http.Request) {
 	a.public.mu.Lock()
 	fresh := time.Since(a.public.fetched) < a.public.ttl && a.public.sites != nil
