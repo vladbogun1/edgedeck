@@ -60,8 +60,10 @@ type Verdict struct {
 }
 
 var (
-	dportRe = regexp.MustCompile(`--dport\s+(\d+)`)
-	srcRe   = regexp.MustCompile(`-s\s+(\S+)`)
+	dportRe     = regexp.MustCompile(`--dport\s+(\d+)`)
+	multiportRe = regexp.MustCompile(`--dports\s+([\d,]+)`)
+	protoRe     = regexp.MustCompile(`-p\s+(tcp|udp)`)
+	srcRe       = regexp.MustCompile(`-s\s+(\S+)`)
 )
 
 // Judge выносит вердикт для порта.
@@ -114,37 +116,132 @@ func (r *Reader) Judge(port int, proto string, fromDocker, loopbackOnly bool) Ve
 		}
 	}
 
-	// Хостовой порт: решают правила ufw, и только если до них доходит трафик.
+	// Хостовой порт. Цепочку INPUT надо проходить ПО ПОРЯДКУ: первое совпавшее
+	// правило и решает. Одного флага «работает ли ufw» мало — на oracle-3 SSH
+	// доступен именно потому, что Oracle разрешает 22 явным правилом ВЫШЕ своего
+	// REJECT, хотя до ufw-цепочек трафик уже не доходит.
+	return judgeHostPort(dump, port, proto)
+}
+
+func judgeHostPort(dump fwdump.Dump, port int, proto string) Verdict {
+	for _, rule := range dump.Input {
+		// Дошли до ufw — дальше решают его правила.
+		if strings.Contains(rule, "-j ufw-") {
+			return judgeByUFW(dump, port)
+		}
+		if !ruleMatchesPort(rule, port, proto) {
+			// Безусловный запрет раньше ufw закрывает всё, что не разрешено выше.
+			// Именно так устроен oracle-3, и именно поэтому там правила ufw
+			// бесполезны (DESIGN.md §2.6).
+			if unconditionalBlock(rule) {
+				return Verdict{
+					Level:   "closed",
+					Summary: "недостижим: до правил ufw трафик не доходит",
+					Detail: "в цепочке INPUT раньше срабатывает безусловный запрет (" + rule + "), " +
+						"поэтому порт недоступен ни снаружи, ни из контейнеров, и правила ufw ничего не меняют",
+					Advice: "если доступ нужен: sudo iptables -I INPUT -p " + proto + " --dport " + strconv.Itoa(port) +
+						" -j ACCEPT (именно -I, вставкой ВЫШЕ запрета)",
+				}
+			}
+			continue
+		}
+		switch {
+		case strings.Contains(rule, "-j ACCEPT"):
+			if src := srcRe.FindStringSubmatch(rule); src != nil && src[1] != "0.0.0.0/0" {
+				return Verdict{
+					Level:   "limited",
+					Summary: "только с " + src[1],
+					Detail:  "правило в цепочке INPUT разрешает этот адрес: " + rule,
+					Allowed: []string{src[1]},
+				}
+			}
+			return Verdict{
+				Level:   "open",
+				Summary: "видно из интернета",
+				Detail:  "правило в цепочке INPUT разрешает порт всем: " + rule,
+				Advice:  "если доступ снаружи не нужен — уберите это правило: sudo iptables -D INPUT " + strings.TrimPrefix(rule, "-A INPUT "),
+			}
+		case strings.Contains(rule, "-j DROP"), strings.Contains(rule, "-j REJECT"):
+			return Verdict{
+				Level:   "closed",
+				Summary: "закрыт правилом INPUT",
+				Detail:  "трафик на этот порт отбрасывается раньше всех прочих правил: " + rule,
+			}
+		}
+	}
+
+	// До ufw-цепочек не дошли: значит их в INPUT нет вообще или выше сработал
+	// безусловный запрет.
 	if !dump.UFWWorks {
 		return Verdict{
 			Level:   "closed",
-			Summary: "недостижим (правила ufw не работают)",
-			Detail: "в цепочке INPUT безусловный REJECT стоит раньше перехода в ufw, поэтому хостовые порты " +
-				"недоступны ни снаружи, ни из контейнеров — и добавление правил ufw это не меняет",
-			Advice: "нужен порядок: sudo iptables -I INPUT -p " + proto + " --dport " + strconv.Itoa(port) + " -j ACCEPT",
+			Summary: "недостижим: до правил ufw трафик не доходит",
+			Detail: "в цепочке INPUT безусловный REJECT стоит раньше перехода в ufw, поэтому этот порт " +
+				"недоступен ни снаружи, ни из контейнеров, и добавление правил ufw ничего не изменит",
+			Advice: "если доступ нужен: sudo iptables -I INPUT -p " + proto + " --dport " + strconv.Itoa(port) + " -j ACCEPT (именно -I, вставкой ВЫШЕ REJECT)",
 		}
 	}
-	if allowed, ok := ufwAllows(dump.UFW, port); ok {
-		if len(allowed) > 0 {
-			return Verdict{
-				Level:   "limited",
-				Summary: "только с " + strings.Join(allowed, ", "),
-				Detail:  "правило ufw разрешает эти адреса",
-				Allowed: allowed,
-			}
-		}
+	return judgeByUFW(dump, port)
+}
+
+func judgeByUFW(dump fwdump.Dump, port int) Verdict {
+	allowed, found := ufwAllows(dump.UFW, port)
+	if !found {
 		return Verdict{
-			Level:   "open",
-			Summary: "видно из интернета",
-			Detail:  "правило ufw разрешает этот порт всем",
-			Advice:  "sudo ufw delete allow " + strconv.Itoa(port) + " — если доступ снаружи не нужен",
+			Level:   "closed",
+			Summary: "закрыт (нет правила ufw)",
+			Detail:  "порт слушает, но ufw его не разрешает, а политика по умолчанию — запрет",
+		}
+	}
+	if len(allowed) > 0 {
+		return Verdict{
+			Level:   "limited",
+			Summary: "только с " + strings.Join(allowed, ", "),
+			Detail:  "правило ufw разрешает эти адреса",
+			Allowed: allowed,
 		}
 	}
 	return Verdict{
-		Level:   "closed",
-		Summary: "закрыт (нет правила ufw)",
-		Detail:  "порт слушает, но ufw его не разрешает, а политика по умолчанию — запрет",
+		Level:   "open",
+		Summary: "видно из интернета",
+		Detail:  "правило ufw разрешает этот порт всем",
+		Advice:  "sudo ufw delete allow " + strconv.Itoa(port) + " — если доступ снаружи не нужен",
 	}
+}
+
+// unconditionalBlock — правило, которое рубит всё подряд: есть REJECT или DROP
+// и нет ни одного условия (порт, адрес, интерфейс, состояние соединения).
+func unconditionalBlock(rule string) bool {
+	if !strings.Contains(rule, "-j REJECT") && !strings.Contains(rule, "-j DROP") {
+		return false
+	}
+	for _, cond := range []string{"--dport", "--dports", "-s ", "-d ", "-i ", "-o ", "--state", "--ctstate"} {
+		if strings.Contains(rule, cond) {
+			return false
+		}
+	}
+	return true
+}
+
+// ruleMatchesPort — относится ли правило к этому порту и протоколу.
+// Правило без указания порта считается общим и к конкретному порту не относится:
+// иначе «-A INPUT -i lo -j ACCEPT» объявило бы открытым вообще всё.
+func ruleMatchesPort(rule string, port int, proto string) bool {
+	if p := protoRe.FindStringSubmatch(rule); p != nil && p[1] != proto {
+		return false
+	}
+	if m := dportRe.FindStringSubmatch(rule); m != nil {
+		got, _ := strconv.Atoi(m[1])
+		return got == port
+	}
+	if m := multiportRe.FindStringSubmatch(rule); m != nil {
+		for _, part := range strings.Split(m[1], ",") {
+			if got, err := strconv.Atoi(strings.TrimSpace(part)); err == nil && got == port {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // dockerUserRules разбирает правила цепочки DOCKER-USER для порта.

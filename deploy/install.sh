@@ -25,7 +25,11 @@ note() { printf '  %s\n' "$*"; }
 [ -f "$EDGE_DIR/Caddyfile" ] || { echo "нет $EDGE_DIR/Caddyfile"; exit 1; }
 
 say "1. Каталог панели: $DECK_DIR"
-mkdir -p "$DECK_DIR/data" "$DECK_DIR/state"
+mkdir -p "$DECK_DIR/data"
+# Каталог снимка правил фаервола принадлежит root: контейнер-сборщик работает с
+# cap_drop: ALL, а без CAP_DAC_OVERRIDE root не может писать туда, где он не
+# владелец. Панель монтирует этот каталог только на чтение.
+sudo install -d -o root -g root -m 755 "$DECK_DIR/state"
 SRC_DIR="$(cd "$(dirname "$0")" && pwd)"
 if [ "$SRC_DIR" != "$DECK_DIR" ]; then
   cp -f "$SRC_DIR/docker-compose.yml" "$DECK_DIR/docker-compose.yml"

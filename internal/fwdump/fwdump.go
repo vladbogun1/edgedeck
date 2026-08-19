@@ -18,6 +18,8 @@ package fwdump
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -60,6 +62,16 @@ func Run(ctx context.Context, cfg Config) error {
 	if err := os.MkdirAll(filepath.Dir(cfg.OutFile), 0o755); err != nil {
 		return err
 	}
+	// Проверяем право записи сразу, а не молча: у этого контейнера cap_drop: ALL,
+	// и без CAP_DAC_OVERRIDE root не может писать в каталог чужого владельца.
+	// Ошибка при старте лучше, чем панель, которая вечно ждёт снимок.
+	if err := os.WriteFile(cfg.OutFile+".probe", []byte("ok"), 0o644); err != nil {
+		return fmt.Errorf("не могу писать в %s: %w — каталог должен принадлежать root, "+
+			"потому что cap_drop: ALL забирает у root право писать туда, где он не владелец",
+			filepath.Dir(cfg.OutFile), err)
+	}
+	_ = os.Remove(cfg.OutFile + ".probe")
+
 	t := time.NewTicker(cfg.Interval)
 	defer t.Stop()
 	write(cfg)
@@ -77,11 +89,20 @@ func write(cfg Config) {
 	d := collect(cfg)
 	b, err := json.MarshalIndent(d, "", "  ")
 	if err != nil {
+		slog.Error("снимок правил не сериализуется", "err", err)
 		return
 	}
 	tmp := cfg.OutFile + ".tmp"
-	if os.WriteFile(tmp, b, 0o644) == nil {
-		_ = os.Rename(tmp, cfg.OutFile)
+	if err := os.WriteFile(tmp, b, 0o644); err != nil {
+		slog.Error("снимок правил не записался", "file", tmp, "err", err)
+		return
+	}
+	if err := os.Rename(tmp, cfg.OutFile); err != nil {
+		slog.Error("снимок правил не переименовался", "err", err)
+		return
+	}
+	if d.Error != "" {
+		slog.Warn("снимок правил записан с ошибкой", "err", d.Error)
 	}
 }
 
