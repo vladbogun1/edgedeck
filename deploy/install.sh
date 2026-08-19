@@ -25,7 +25,7 @@ note() { printf '  %s\n' "$*"; }
 [ -f "$EDGE_DIR/Caddyfile" ] || { echo "нет $EDGE_DIR/Caddyfile"; exit 1; }
 
 say "1. Каталог панели: $DECK_DIR"
-mkdir -p "$DECK_DIR/data"
+mkdir -p "$DECK_DIR/data" "$DECK_DIR/state"
 SRC_DIR="$(cd "$(dirname "$0")" && pwd)"
 if [ "$SRC_DIR" != "$DECK_DIR" ]; then
   cp -f "$SRC_DIR/docker-compose.yml" "$DECK_DIR/docker-compose.yml"
@@ -58,6 +58,12 @@ EDGEDECK_TLS_ASK_TOKEN=$(head -c 24 /dev/urandom | base64 | tr -d '+/=')
 
 # Стартовый пароль. После первого входа смените его в панели и можете убрать.
 EDGEDECK_INITIAL_PASSWORD=$PASSWORD
+
+# Уведомления в Telegram (необязательно, но очень желательно: иначе о сломанном
+# продлении сертификата вы узнаете от посетителей). Токен у @BotFather,
+# идентификатор чата — у @userinfobot.
+EDGEDECK_TELEGRAM_TOKEN=
+EDGEDECK_TELEGRAM_CHAT=
 EOF
   chmod 600 "$DECK_DIR/.env"
   note ".env создан, стартовый пароль: $PASSWORD"

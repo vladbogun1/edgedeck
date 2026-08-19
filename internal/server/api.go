@@ -14,6 +14,7 @@ import (
 
 	"github.com/vladbogun1/edgedeck/internal/auth"
 	"github.com/vladbogun1/edgedeck/internal/caddyx"
+	"github.com/vladbogun1/edgedeck/internal/firewall"
 	"github.com/vladbogun1/edgedeck/internal/hostports"
 	"github.com/vladbogun1/edgedeck/internal/sites"
 	"github.com/vladbogun1/edgedeck/internal/state"
@@ -55,6 +56,7 @@ func (a *app) handleLogin(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteLaxMode,
 	})
 	a.state.Audit("login", ip, "вход в панель", map[string]any{"host": r.Host})
+	a.notifyEvent("login", "🔑 вход в панель с адреса "+ip+"\nдомен: "+r.Host)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
@@ -410,13 +412,26 @@ func (a *app) handlePorts(w http.ResponseWriter, r *http.Request) {
 	}
 	type portOut struct {
 		hostports.Port
-		Container string `json:"container"`
+		Container string           `json:"container"`
+		Verdict   firewall.Verdict `json:"verdict"`
 	}
 	out := make([]portOut, 0, len(list))
 	for _, p := range list {
-		out = append(out, portOut{Port: p, Container: byPublic[p.Port]})
+		container := byPublic[p.Port]
+		fromDocker := p.IsDocker || container != ""
+		out = append(out, portOut{
+			Port:      p,
+			Container: container,
+			Verdict:   a.firewall.Judge(p.Port, p.Proto, fromDocker, p.LoopbackOnly),
+		})
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"available": true, "ports": out})
+	fwOK, fwMsg := a.firewall.Health()
+	writeJSON(w, http.StatusOK, map[string]any{
+		"available":       true,
+		"ports":           out,
+		"firewall_ok":     fwOK,
+		"firewall_status": fwMsg,
+	})
 }
 
 func (a *app) handleCertificates(w http.ResponseWriter, r *http.Request) {
@@ -508,6 +523,8 @@ func writeJSON(w http.ResponseWriter, status int, payload any) {
 }
 
 func itoa(n int) string { return strconv.Itoa(n) }
+
+func versionString() string { return version.Version }
 
 // askToken — секрет в пути /internal/tls-ask/<token>. Его знает только Caddy,
 // которому его прописал установщик: иначе этот путь можно было бы позвать из

@@ -42,6 +42,9 @@ type Config struct {
 	// PublicIP — внешний адрес сервера. Если пусто, определяется сам.
 	PublicIP string
 
+	// FirewallFile — снимок правил фаервола, который пишет отдельный контейнер.
+	FirewallFile string
+
 	// TLSAskLimit — сколько новых доменов в час разрешаем выпускать (DESIGN.md §7).
 	TLSAskLimit int
 
@@ -63,6 +66,7 @@ func Load() (Config, error) {
 		CaddyDataDir:    env("EDGEDECK_CADDY_DATA", "/caddy-data"),
 		HostProcDir:     env("EDGEDECK_HOST_PROC", "/host/proc"),
 		PublicIP:        env("EDGEDECK_PUBLIC_IP", ""),
+		FirewallFile:    env("EDGEDECK_FIREWALL_FILE", "/state/firewall.json"),
 		TLSAskLimit:     envInt("EDGEDECK_TLS_ASK_LIMIT", 10),
 		SessionTTL:      envDuration("EDGEDECK_SESSION_TTL", 30*24*time.Hour),
 		InitialPassword: env("EDGEDECK_INITIAL_PASSWORD", ""),

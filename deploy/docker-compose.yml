@@ -31,6 +31,25 @@ services:
         max-size: "10m"
         max-file: "5"
 
+  # Сборщик правил фаервола. Единственный контейнер с CAP_NET_ADMIN, и он
+  # намеренно НИКУДА не слушает: раз в 30 секунд пишет снимок правил в файл,
+  # который панель читает только на чтение. Записать правила через него нельзя.
+  firewall:
+    image: ${EDGEDECK_IMAGE}
+    container_name: edgedeck-firewall
+    command: ["--firewall"]
+    restart: unless-stopped
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    cap_drop:
+      - ALL
+    volumes:
+      - ./state:/state
+      - /etc/ufw:/host/etc/ufw:ro
+    logging: *logs
+
   panel:
     image: ${EDGEDECK_IMAGE}
     container_name: edgedeck
@@ -44,6 +63,9 @@ services:
       EDGEDECK_EDGE_NETWORK: ${EDGEDECK_EDGE_NETWORK:-edge}
       EDGEDECK_PUBLIC_IP: ${EDGEDECK_PUBLIC_IP:-}
       EDGEDECK_INITIAL_PASSWORD: ${EDGEDECK_INITIAL_PASSWORD:-}
+      # Уведомления: без них панель молчит, а молчание — плохой признак состояния.
+      EDGEDECK_TELEGRAM_TOKEN: ${EDGEDECK_TELEGRAM_TOKEN:-}
+      EDGEDECK_TELEGRAM_CHAT: ${EDGEDECK_TELEGRAM_CHAT:-}
     volumes:
       # Каталог Caddy: на этапе 0 только читаем, дальше будем писать routes.yaml.
       - ${EDGE_DIR:-/home/ubuntu/edge}:/edge
@@ -53,6 +75,10 @@ services:
       - /proc:/host/proc:ro
       # Сертификаты Caddy: только чтение, удалить их панель не может физически.
       - caddy_data:/caddy-data:ro
+      # Снимок правил фаервола от контейнера firewall — только на чтение.
+      # Каталог намеренно вынесен из ./data: иначе панель могла бы писать в него
+      # через свой rw-монтаж, и «только чтение» было бы фикцией.
+      - ./state:/state:ro
     networks: [edge]
     logging: *logs
 

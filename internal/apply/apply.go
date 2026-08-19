@@ -225,6 +225,12 @@ func (a *Applier) Apply(ctx context.Context, cfg routes.Config, opts Options) (R
 	return res, nil
 }
 
+// ProbeDomains опрашивает все известные домены — нужно сторожу, который следит
+// за сайтами между изменениями.
+func (a *Applier) ProbeDomains(ctx context.Context, cfg routes.Config) map[string]string {
+	return a.probeAll(ctx, a.knownDomains(cfg))
+}
+
 // regressions — что стало хуже. Улучшения и одинаковые ответы игнорируем:
 // панель не должна ругаться на то, что сайт, который и так лежал, лежит дальше.
 func regressions(before, after map[string]string) []string {

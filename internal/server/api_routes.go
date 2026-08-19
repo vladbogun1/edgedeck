@@ -235,6 +235,7 @@ func (a *app) applyAndRespond(w http.ResponseWriter, r *http.Request, cfg routes
 	res, err := a.applier.Apply(r.Context(), cfg, apply.Options{Actor: actor, Reason: action, Adopt: adopt})
 	if err != nil {
 		a.state.Audit("apply_failed", actor, action+" — не вышло: "+err.Error(), nil)
+		a.notifyEvent("apply_failed", "🔴 не применилось: "+action+"\n"+err.Error())
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error(), "changes": res.Changes})
 		return
 	}
@@ -243,6 +244,11 @@ func (a *app) applyAndRespond(w http.ResponseWriter, r *http.Request, cfg routes
 		kind = "rollback_auto"
 	}
 	a.state.Audit(kind, actor, action+" — "+res.Message, map[string]any{"snapshot": res.Snapshot})
+	if res.RolledBack {
+		a.notifyEvent(kind, "🟠 <b>откат</b>: "+action+"\n"+res.Message)
+	} else {
+		a.notifyEvent(kind, "🟢 "+action+"\n"+res.Message)
+	}
 	a.public.invalidate()
 	writeJSON(w, http.StatusOK, res)
 }

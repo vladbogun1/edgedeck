@@ -90,6 +90,26 @@ export type HostPort = {
   loopback_only: boolean;
   guess: string;
   container: string;
+  verdict: Verdict;
+};
+
+// Вердикт по порту: три слоя фильтрации, сведённые в один ответ.
+export type Verdict = {
+  level: "open" | "limited" | "closed" | "unknown";
+  summary: string;
+  detail: string;
+  advice?: string;
+  allowed?: string[] | null;
+};
+
+export type Settings = {
+  server: { hostname: string; public_ip: string; version: string; edge_dir: string };
+  telegram: { configured: boolean };
+  firewall: { ok: boolean; status: string; ufw_works: boolean };
+  caddy: { alive: boolean; message: string };
+  agent: { ok: boolean; message: string };
+  sessions: { token: string; created: string; last_seen: string; ip: string; user_agent: string }[] | null;
+  watch: { interval: string; down_warn: string; cert_warn_days: number };
 };
 
 export type Event = {
@@ -177,7 +197,15 @@ export const api = {
   logout: () => request<{ ok: boolean }>("/api/logout", { method: "POST" }),
   overview: () => request<Overview>("/api/overview"),
   containers: () => request<{ containers: Container[]; networks: { name: string }[] }>("/api/containers"),
-  ports: () => request<{ available: boolean; error?: string; ports: HostPort[] }>("/api/ports"),
+  ports: () =>
+    request<{ available: boolean; error?: string; ports: HostPort[]; firewall_ok?: boolean; firewall_status?: string }>(
+      "/api/ports",
+    ),
+  settings: () => request<Settings>("/api/settings"),
+  testTelegram: () =>
+    request<{ ok: boolean; message: string }>("/api/settings/test-telegram", { method: "POST" }),
+  changePassword: (current: string, next: string) =>
+    request<{ ok: boolean }>("/api/password", { method: "POST", body: JSON.stringify({ current, new: next }) }),
   events: () => request<{ events: Event[] }>("/api/events"),
   checkDomain: (domain: string) =>
     request<{ domain: string; resolved: string[] | null; server_ip: string; points_here: boolean; message: string }>(

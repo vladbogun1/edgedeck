@@ -22,8 +22,10 @@ import (
 	"github.com/vladbogun1/edgedeck/internal/caddyx"
 	"github.com/vladbogun1/edgedeck/internal/config"
 	"github.com/vladbogun1/edgedeck/internal/dockerinfo"
+	"github.com/vladbogun1/edgedeck/internal/firewall"
 	"github.com/vladbogun1/edgedeck/internal/hostports"
 	"github.com/vladbogun1/edgedeck/internal/netcheck"
+	"github.com/vladbogun1/edgedeck/internal/notify"
 	"github.com/vladbogun1/edgedeck/internal/state"
 	"github.com/vladbogun1/edgedeck/internal/webui"
 )
@@ -39,9 +41,12 @@ type app struct {
 	ports  *hostports.Reader
 	net    *netcheck.Checker
 
-	tlsAsk  *askLimiter
-	public  *publicCache
-	applier *apply.Applier
+	tlsAsk   *askLimiter
+	public   *publicCache
+	applier  *apply.Applier
+	firewall *firewall.Reader
+	notify   *notify.Notifier
+	watch    *watchState
 }
 
 func Run(ctx context.Context, cfg config.Config) error {
@@ -69,15 +74,18 @@ func Run(ctx context.Context, cfg config.Config) error {
 	}
 
 	a := &app{
-		cfg:    cfg,
-		auth:   authStore,
-		state:  state.NewStore(cfg.SeenDomainsFile(), cfg.AuditFile()),
-		docker: dockerinfo.New(cfg.AgentURL, os.Getenv("EDGEDECK_AGENT_TOKEN"), edgeNetworkName()),
-		caddy:  caddyx.New(cfg.CaddyAdminURL, cfg.CaddyDataDir, filepath.Join(cfg.EdgeDir, "certs")),
-		ports:  hostports.New(cfg.HostProcDir),
-		net:    netcheck.New(cfg.PublicIP),
-		tlsAsk: newAskLimiter(cfg.TLSAskLimit),
-		public: newPublicCache(),
+		cfg:      cfg,
+		auth:     authStore,
+		state:    state.NewStore(cfg.SeenDomainsFile(), cfg.AuditFile()),
+		docker:   dockerinfo.New(cfg.AgentURL, os.Getenv("EDGEDECK_AGENT_TOKEN"), edgeNetworkName()),
+		caddy:    caddyx.New(cfg.CaddyAdminURL, cfg.CaddyDataDir, filepath.Join(cfg.EdgeDir, "certs")),
+		ports:    hostports.New(cfg.HostProcDir),
+		net:      netcheck.New(cfg.PublicIP),
+		tlsAsk:   newAskLimiter(cfg.TLSAskLimit),
+		public:   newPublicCache(),
+		firewall: firewall.New(cfg.FirewallFile),
+		notify:   notify.New(notify.LoadConfig()),
+		watch:    newWatchState(),
 	}
 	a.applier = &apply.Applier{
 		EdgeDir:     cfg.EdgeDir,
@@ -94,6 +102,13 @@ func Run(ctx context.Context, cfg config.Config) error {
 		Handler:           a.middleware(mux),
 		ReadHeaderTimeout: 15 * time.Second,
 		IdleTimeout:       120 * time.Second,
+	}
+
+	if a.notify.Enabled() {
+		slog.Info("уведомления в Telegram включены")
+		go a.runWatcher(ctx)
+	} else {
+		slog.Info("уведомления в Telegram выключены: нет EDGEDECK_TELEGRAM_TOKEN/CHAT")
 	}
 
 	// Замеченные домены сбрасываем на диск по таймеру, а не на каждый запрос.
@@ -157,6 +172,8 @@ func (a *app) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/routes/delete", a.requireAuth(a.handleRouteDelete))
 	mux.HandleFunc("POST /api/routes/import", a.requireAuth(a.handleRouteImport))
 	mux.HandleFunc("GET /api/snapshots", a.requireAuth(a.handleSnapshots))
+	mux.HandleFunc("GET /api/settings", a.requireAuth(a.handleSettings))
+	mux.HandleFunc("POST /api/settings/test-telegram", a.requireAuth(a.handleTestTelegram))
 	mux.HandleFunc("POST /api/rollback", a.requireAuth(a.handleRollback))
 
 	mux.Handle("/", webui.Handler())

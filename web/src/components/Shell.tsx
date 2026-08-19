@@ -5,9 +5,10 @@ import { PortsView } from "./PortsView";
 import { CertsView } from "./CertsView";
 import { HistoryView } from "./HistoryView";
 import { ContainersView } from "./ContainersView";
+import { SettingsView } from "./SettingsView";
 
-type Tab = "домены" | "цели" | "порты" | "сертификаты" | "история";
-const tabs: Tab[] = ["домены", "цели", "порты", "сертификаты", "история"];
+type Tab = "домены" | "цели" | "порты" | "сертификаты" | "история" | "настройки";
+const tabs: Tab[] = ["домены", "цели", "порты", "сертификаты", "история", "настройки"];
 
 export function Shell({ onLogout }: { onLogout: () => void }) {
   const [tab, setTab] = useState<Tab>("домены");
@@ -90,6 +91,7 @@ export function Shell({ onLogout }: { onLogout: () => void }) {
         {tab === "порты" && <PortsView />}
         {tab === "сертификаты" && <CertsView certs={overview?.certificates ?? []} />}
         {tab === "история" && <HistoryView />}
+        {tab === "настройки" && <SettingsView />}
       </main>
     </div>
   );
