@@ -37,65 +37,65 @@ const (
 )
 
 type Config struct {
-	Version int     `yaml:"version"`
-	Routes  []Route `yaml:"routes"`
+	Version int     `yaml:"version" json:"version"`
+	Routes  []Route `yaml:"routes" json:"routes"`
 }
 
 type Route struct {
 	// Domain — основное имя. ID маршрута = domain + path.
-	Domain  string   `yaml:"domain"`
-	Aliases []string `yaml:"aliases,omitempty"`
+	Domain  string   `yaml:"domain" json:"domain"`
+	Aliases []string `yaml:"aliases,omitempty" json:"aliases,omitempty"`
 
 	// Path — «/» для всего сайта или «/logs/» для части (DESIGN.md §2.10).
-	Path string `yaml:"path,omitempty"`
+	Path string `yaml:"path,omitempty" json:"path,omitempty"`
 
-	Type   string  `yaml:"type"`
-	Target *Target `yaml:"target,omitempty"`
+	Type   string  `yaml:"type" json:"type"`
+	Target *Target `yaml:"target,omitempty" json:"target,omitempty"`
 
 	// RedirectTo — куда, если type: redirect.
-	RedirectTo string `yaml:"redirect_to,omitempty"`
+	RedirectTo string `yaml:"redirect_to,omitempty" json:"redirect_to,omitempty"`
 
 	// MaxUpload — «максимальный размер загрузки», например 128MB.
 	// Без него Vaultwarden отдавал 413 на вложениях (DESIGN.md §2.13).
-	MaxUpload string `yaml:"max_upload,omitempty"`
+	MaxUpload string `yaml:"max_upload,omitempty" json:"max_upload,omitempty"`
 
 	// ReadTimeout — сколько ждать ответа. Пусто = не ограничивать: в Caddy
 	// таймаута по умолчанию нет, и живые логи с WebSocket не рвутся сами.
-	ReadTimeout string `yaml:"read_timeout,omitempty"`
+	ReadTimeout string `yaml:"read_timeout,omitempty" json:"read_timeout,omitempty"`
 
-	SecurityHeaders bool `yaml:"security_headers"`
+	SecurityHeaders bool `yaml:"security_headers" json:"security_headers"`
 
 	// HSTS — билет в одну сторону: браузер запомнит на год (DESIGN.md §2.14).
-	HSTS bool `yaml:"hsts"`
+	HSTS bool `yaml:"hsts" json:"hsts"`
 
 	// HideUpstreamCSP — снять CSP апстрима, чтобы не было двух заголовков
 	// (DESIGN.md §2.11). Ставится только вместе со своим CSP.
-	HideUpstreamCSP bool   `yaml:"hide_upstream_csp,omitempty"`
-	CSP             string `yaml:"csp,omitempty"`
+	HideUpstreamCSP bool   `yaml:"hide_upstream_csp,omitempty" json:"hide_upstream_csp,omitempty"`
+	CSP             string `yaml:"csp,omitempty" json:"csp,omitempty"`
 
 	// Auth — «требовать вход»: спросить у чужой панели, есть ли сессия.
-	Auth *ForwardAuth `yaml:"auth,omitempty"`
+	Auth *ForwardAuth `yaml:"auth,omitempty" json:"auth,omitempty"`
 
 	// AllowIPs — пускать только с этих адресов.
-	AllowIPs []string `yaml:"allow_ips,omitempty"`
+	AllowIPs []string `yaml:"allow_ips,omitempty" json:"allow_ips,omitempty"`
 
 	// DenyPaths — пути, которые наружу не отдаём (404, а не 403: не подтверждаем
 	// существование). Осторожно: правило бьёт и по браузеру (DESIGN.md §2.12).
-	DenyPaths []string `yaml:"deny_paths,omitempty"`
+	DenyPaths []string `yaml:"deny_paths,omitempty" json:"deny_paths,omitempty"`
 
-	Comment string `yaml:"comment,omitempty"`
+	Comment string `yaml:"comment,omitempty" json:"comment,omitempty"`
 }
 
 type Target struct {
-	Kind string `yaml:"kind"`
-	Name string `yaml:"name,omitempty"` // контейнер или хостовое имя
-	Port int    `yaml:"port,omitempty"`
-	URL  string `yaml:"url,omitempty"` // для external
+	Kind string `yaml:"kind" json:"kind"`
+	Name string `yaml:"name,omitempty" json:"name,omitempty"` // контейнер или хостовое имя
+	Port int    `yaml:"port,omitempty" json:"port,omitempty"`
+	URL  string `yaml:"url,omitempty" json:"url,omitempty"` // для external
 }
 
 type ForwardAuth struct {
-	Upstream string `yaml:"upstream"` // контейнер:порт панели-авторизатора
-	URI      string `yaml:"uri"`      // путь проверки, например /api/authcheck
+	Upstream string `yaml:"upstream" json:"upstream"` // контейнер:порт панели-авторизатора
+	URI      string `yaml:"uri" json:"uri"`           // путь проверки, например /api/authcheck
 }
 
 // ID — устойчивый идентификатор маршрута для интерфейса.

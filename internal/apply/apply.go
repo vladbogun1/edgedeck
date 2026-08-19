@@ -128,6 +128,12 @@ func (a *Applier) Plan(ctx context.Context, cfg routes.Config, adopt map[string]
 	for _, f := range files {
 		before, hadBefore := current[f]
 		after, wantAfter := wanted[f]
+		// Файл, написанный руками, панель не пишет и не удаляет. В плане он
+		// должен выглядеть неизменным, иначе план обещает то, чего не сделает.
+		if manual[f] {
+			p.Changes = append(p.Changes, Change{Kind: "unchanged", File: f})
+			continue
+		}
 		switch {
 		case wantAfter && !hadBefore:
 			p.Changes = append(p.Changes, Change{Kind: "create", File: f, After: after})

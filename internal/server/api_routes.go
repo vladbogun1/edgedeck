@@ -23,10 +23,15 @@ type routesResponse struct {
 	FilePath string       `json:"file_path"`
 }
 
+// routeView — маршрут плюс вычисленные поля для интерфейса.
+//
+// Поле называется TargetAddr, а не Target, специально: одноимённое поле
+// перекрыло бы вложенное Route.Target, и в JSON цель вообще не попала бы —
+// правка маршрута в интерфейсе молча теряла бы контейнер и порт.
 type routeView struct {
 	routes.Route
-	ID     string `json:"id"`
-	Target string `json:"target_addr"`
+	ID         string `json:"id"`
+	TargetAddr string `json:"target_addr"`
 }
 
 // manualView — файл, написанный руками. Панель его не трогает, но предлагает
@@ -48,7 +53,7 @@ func (a *app) handleRoutesList(w http.ResponseWriter, r *http.Request) {
 	}
 	resp := routesResponse{FilePath: routes.Path(a.cfg.EdgeDir)}
 	for _, rt := range cfg.Routes {
-		resp.Routes = append(resp.Routes, routeView{Route: rt, ID: rt.ID(), Target: rt.Target.Addr()})
+		resp.Routes = append(resp.Routes, routeView{Route: rt, ID: rt.ID(), TargetAddr: rt.Target.Addr()})
 	}
 
 	siteList, _ := sites.Load(a.cfg.SitesDir())
