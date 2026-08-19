@@ -298,9 +298,7 @@ func (a *app) handleOverview(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	if ports, err := a.ports.List(); err == nil {
-		for _, w := range dangerousPorts(ports) {
-			ov.Warnings = append(ov.Warnings, w)
-		}
+		ov.Warnings = append(ov.Warnings, dangerousPorts(ports, a.containerByPort(r))...)
 	} else {
 		ov.Warnings = append(ov.Warnings, warning{
 			Level: "yellow", Title: "не вижу порты хоста",
@@ -315,9 +313,28 @@ func (a *app) handleOverview(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, ov)
 }
 
+// containerByPort — какой контейнер держит опубликованный порт. Без этого в
+// предупреждении будет «неизвестный процесс» вместо имени, потому что порт
+// формально держит docker-proxy, а имя процесса панель не читает (DESIGN.md §2.26).
+func (a *app) containerByPort(r *http.Request) map[int]string {
+	out := map[int]string{}
+	containers, err := a.docker.Containers(r.Context())
+	if err != nil {
+		return out
+	}
+	for _, c := range containers {
+		for _, p := range c.Ports {
+			if p.Published {
+				out[p.Public] = c.Name
+			}
+		}
+	}
+	return out
+}
+
 // dangerousPorts — то, что на старых серверах годами торчало в интернет:
 // базы, админки, docker-socket-proxy (DESIGN.md §2.16).
-func dangerousPorts(ports []hostports.Port) []warning {
+func dangerousPorts(ports []hostports.Port, byPort map[int]string) []warning {
 	risky := map[int]string{
 		3306: "MySQL", 3307: "MySQL", 3341: "MySQL", 5432: "PostgreSQL",
 		6379: "Redis", 27017: "MongoDB", 9200: "Elasticsearch",
@@ -331,24 +348,33 @@ func dangerousPorts(ports []hostports.Port) []warning {
 		if !bad || p.LoopbackOnly {
 			continue
 		}
-		out = append(out, warning{
-			Level:  "red",
-			Title:  "порт " + itoa(p.Port) + " (" + name + ") слушает на всех адресах",
-			Detail: "держит " + describeProcess(p) + ". Если порт опубликован докером, ufw его не закрывает — фильтр только в цепочке DOCKER-USER",
-			Action: "ограничьте доступ: /opt/docker-acl/ports.conf для docker-портов или ufw для хостовых",
-		})
+		holder := byPort[p.Port]
+		fromDocker := holder != "" || p.IsDocker
+		if holder == "" {
+			holder = "процесс на хосте"
+			if p.Process != "" {
+				holder = p.Process
+			}
+		}
+		w := warning{
+			Level: "yellow",
+			Title: "порт " + itoa(p.Port) + " (" + name + ") слушает на всех адресах",
+		}
+		if fromDocker {
+			// Docker-порт мимо ufw идёт через FORWARD, и ограничить его можно только
+			// в DOCKER-USER. Читать эту цепочку панель пока не умеет (для этого нужен
+			// NET_ADMIN), поэтому не пугаем, а говорим как есть.
+			w.Detail = "держит " + holder + " (порт контейнера). ufw такие порты не закрывает: они идут мимо INPUT. " +
+				"Есть ли ограничение в цепочке DOCKER-USER, панель пока не проверяет"
+			w.Action = "если ACL нет — добавьте порт в /opt/docker-acl/ports.conf и примените apply.sh"
+		} else {
+			w.Level = "red"
+			w.Detail = "держит " + holder + " вне докера, то есть порт закрывается обычными правилами ufw"
+			w.Action = "ufw deny " + itoa(p.Port) + " или ограничение по адресам, если доступ нужен"
+		}
+		out = append(out, w)
 	}
 	return out
-}
-
-func describeProcess(p hostports.Port) string {
-	if p.Process == "" {
-		return "неизвестный процесс"
-	}
-	if p.IsDocker {
-		return p.Process + " (порт контейнера)"
-	}
-	return p.Process
 }
 
 func (a *app) handleContainers(w http.ResponseWriter, r *http.Request) {
