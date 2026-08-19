@@ -386,7 +386,13 @@ func (a *app) handleContainers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	nets, _ := a.docker.Networks(r.Context())
-	writeJSON(w, http.StatusOK, map[string]any{"containers": list, "networks": nets})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"containers": list,
+		"networks":   nets,
+		// Подсказка для чужого compose: подключение сетью панель восстановит сама
+		// после пересоздания контейнера, но правильнее закрепить его в файле.
+		"compose_hint": composeSnippet(edgeNetworkName()),
+	})
 }
 
 func (a *app) handlePorts(w http.ResponseWriter, r *http.Request) {

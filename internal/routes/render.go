@@ -10,6 +10,13 @@ import (
 // содержит, считается написанным руками и не перезаписывается никогда.
 const GeneratedMarker = "СГЕНЕРИРОВАНО EdgeDeck"
 
+// Где лежит страница ошибки. Каталог внутри www, имя с подчёркиванием — чтобы
+// не столкнуться с каталогом настоящего домена.
+const (
+	ErrorPageDir  = "_edgedeck"
+	ErrorPageFile = "error.html"
+)
+
 // Render собирает файлы sites/*.caddy из маршрутов: имя файла → содержимое.
 //
 // Один домен = один файл, даже если у него несколько маршрутов по путям:
@@ -86,6 +93,19 @@ func renderDomain(domain string, list []Route) string {
 			b.WriteString("\t}\n")
 		}
 	}
+
+	// Страница вместо голого «502 Bad Gateway». Перезапуск контейнера — это
+	// обычная жизнь, и посетитель в такой момент должен видеть внятное «сервис
+	// вернётся через несколько секунд», а не то, что сайт сломался.
+	//
+	// status сохраняет настоящий код ответа: поисковики и мониторинги обязаны
+	// видеть 502, а не 200 с текстом об ошибке.
+	fmt.Fprintf(&b, "\n\thandle_errors {\n")
+	fmt.Fprintf(&b, "\t\troot * /var/www/%s\n", ErrorPageDir)
+	fmt.Fprintf(&b, "\t\trewrite * /%s\n", ErrorPageFile)
+	fmt.Fprintf(&b, "\t\ttemplates\n")
+	fmt.Fprintf(&b, "\t\tfile_server {\n\t\t\tstatus {err.status_code}\n\t\t}\n")
+	fmt.Fprintf(&b, "\t}\n")
 
 	fmt.Fprintf(&b, "\n\tlog {\n\t\toutput file /var/log/caddy/%s.log {\n\t\t\troll_size 10MiB\n\t\t\troll_keep 5\n\t\t}\n\t\tformat json\n\t}\n", domain)
 	b.WriteString("}\n")

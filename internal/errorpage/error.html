@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Сервис недоступен</title>
+<style>
+  /* Одна страница без внешних файлов: она обязана открываться именно тогда,
+     когда что-то не работает. Ни шрифтов, ни картинок, ни скриптов извне. */
+  :root {
+    --bg: #0b0d12;
+    --bg2: #12151d;
+    --line: rgba(255,255,255,.07);
+    --text: #e7eaf2;
+    --muted: #8b93a7;
+    --spark: #ffd166;
+    --accent: #6aa5ff;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f4f6fb; --bg2: #ffffff; --line: rgba(10,12,20,.08);
+      --text: #171a21; --muted: #656e83; --spark: #d99400; --accent: #2563eb;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    display: grid;
+    place-items: center;
+    padding: 5vh 1.25rem;
+    background:
+      radial-gradient(1200px 600px at 50% -10%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 70%),
+      var(--bg);
+    color: var(--text);
+    font: 400 16px/1.6 ui-sans-serif, system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  /* Сетка на фоне: намёк на схему, а не украшение ради украшения. */
+  body::before {
+    content: "";
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(var(--line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--line) 1px, transparent 1px);
+    background-size: 48px 48px;
+    mask-image: radial-gradient(circle at 50% 30%, #000 0%, transparent 75%);
+    pointer-events: none;
+  }
+  main {
+    position: relative;
+    width: 100%;
+    max-width: 620px;
+    text-align: center;
+  }
+  .scene { width: 100%; height: 170px; margin-bottom: .5rem; overflow: visible; }
+  .cable { stroke: var(--muted); stroke-width: 6; stroke-linecap: round; fill: none; opacity: .85; }
+  .plug  { fill: var(--muted); }
+  .pin   { stroke: var(--muted); stroke-width: 4; stroke-linecap: round; }
+  .left  { animation: drift-l 5s ease-in-out infinite; }
+  .right { animation: drift-r 5s ease-in-out infinite; }
+  .arc   { stroke: var(--spark); stroke-width: 2.5; fill: none; filter: drop-shadow(0 0 6px var(--spark)); animation: flicker 2.6s steps(1) infinite; }
+  .arc2  { animation-delay: .35s; }
+  @keyframes drift-l { 0%,100% { transform: translateX(0) } 50% { transform: translateX(-10px) } }
+  @keyframes drift-r { 0%,100% { transform: translateX(0) } 50% { transform: translateX(10px) } }
+  @keyframes flicker {
+    0%, 42%, 47%, 58%, 100% { opacity: 0 }
+    44%, 55% { opacity: .95 }
+  }
+  .code {
+    font: 700 clamp(3.2rem, 14vw, 5.4rem)/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    letter-spacing: -.03em;
+    margin: 0;
+  }
+  h1 { font-size: clamp(1.15rem, 4.6vw, 1.5rem); font-weight: 600; margin: .35rem 0 .5rem; }
+  p { margin: 0 auto; max-width: 46ch; color: var(--muted); }
+  .host {
+    display: inline-block; margin-top: 1.25rem; padding: .3rem .6rem;
+    border: 1px solid var(--line); border-radius: 8px;
+    background: var(--bg2);
+    font: 500 13px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: var(--text);
+  }
+  .actions { margin-top: 1.5rem; display: flex; gap: .6rem; justify-content: center; flex-wrap: wrap; }
+  button {
+    font: inherit; font-size: 14px; cursor: pointer;
+    padding: .55rem 1rem; border-radius: 10px;
+    border: 1px solid var(--line); background: var(--bg2); color: var(--text);
+  }
+  button.primary { border-color: transparent; background: var(--accent); color: #06080d; font-weight: 600; }
+  button:hover { border-color: var(--accent); }
+  .retry { margin-top: 1rem; font-size: 13px; color: var(--muted); }
+  .retry b { color: var(--text); font-variant-numeric: tabular-nums; }
+  details { margin-top: 1.75rem; font-size: 13px; color: var(--muted); }
+  summary { cursor: pointer; }
+  details ul { text-align: left; margin: .6rem auto 0; max-width: 44ch; padding-left: 1.1rem; }
+  @media (prefers-reduced-motion: reduce) {
+    .left, .right, .arc { animation: none }
+    .arc { opacity: .5 }
+  }
+</style>
+</head>
+<body data-code='{{placeholder "http.error.status_code"}}' data-host='{{placeholder "http.request.host"}}'>
+<main>
+  <!-- Провод разъединён: единственная метафора, которая точно описывает
+       происходящее — запрос дошёл до нас, а дальше связи нет. -->
+  <svg class="scene" viewBox="0 0 620 170" aria-hidden="true">
+    <g class="left">
+      <path class="cable" d="M-10 85 C 90 85, 150 85, 232 85"/>
+      <rect class="plug" x="232" y="70" width="34" height="30" rx="7"/>
+      <path class="pin" d="M266 78 h16 M266 92 h16"/>
+    </g>
+    <g class="right">
+      <path class="cable" d="M630 85 C 530 85, 470 85, 388 85"/>
+      <rect class="plug" x="354" y="70" width="34" height="30" rx="7"/>
+      <path class="pin" d="M338 78 h16 M338 92 h16"/>
+    </g>
+    <path class="arc"  d="M292 85 l10 -9 l6 12 l10 -10 l8 12"/>
+    <path class="arc arc2" d="M294 88 l12 8 l6 -12 l9 9 l7 -11"/>
+  </svg>
+
+  <p class="code" id="code">502</p>
+  <h1 id="title">Сервис не отвечает</h1>
+  <p id="lead">
+    Сайт на месте, но приложение за ним сейчас недоступно — скорее всего его перезапускают.
+    Обычно это занимает несколько секунд.
+  </p>
+
+  <div class="host" id="host">—</div>
+
+  <div class="actions">
+    <button class="primary" onclick="location.reload()">Обновить сейчас</button>
+    <button id="stop">Не обновлять автоматически</button>
+  </div>
+
+  <div class="retry">обновлю сам через <b id="left">15</b> с</div>
+
+  <details>
+    <summary>Что происходит</summary>
+    <ul>
+      <li>Запрос дошёл до сервера — значит домен и сертификат в порядке.</li>
+      <li>Приложение, которому адресован запрос, не ответило.</li>
+      <li>Владелец сервера уже получил уведомление, если сервис молчит дольше пяти минут.</li>
+      <li id="tech"></li>
+    </ul>
+  </details>
+</main>
+
+<script>
+  // Страница подставляет код и домен на сервере (Caddy + templates). Если по
+  // какой-то причине подстановка не сработала, берём то, что знает браузер.
+  var raw = document.body.getAttribute("data-code") || "";
+  var code = /^\d{3}$/.test(raw) ? raw : "502";
+  var host = document.body.getAttribute("data-host") || location.host;
+
+  var titles = {
+    "404": "Страница не найдена",
+    "502": "Сервис не отвечает",
+    "503": "Сервис недоступен",
+    "504": "Сервис отвечает слишком долго"
+  };
+  var leads = {
+    "404": "Домен настроен верно, но по этому адресу ничего нет. Проверьте ссылку.",
+    "504": "Приложение за этим адресом получило запрос, но не успело ответить."
+  };
+
+  document.getElementById("code").textContent = code;
+  document.getElementById("title").textContent = titles[code] || "Что-то пошло не так";
+  if (leads[code]) document.getElementById("lead").textContent = leads[code];
+  document.getElementById("host").textContent = host;
+  document.getElementById("tech").textContent = "Код ответа: " + code + " · " + new Date().toLocaleString("ru-RU");
+
+  // Автообновление: когда приложение вернётся, посетитель попадёт на сайт сам,
+  // без нажатий. Для 404 это бессмысленно — там ждать нечего.
+  var auto = code !== "404";
+  var left = 15;
+  var el = document.getElementById("left");
+  var timer = auto ? setInterval(tick, 1000) : null;
+  if (!auto) document.querySelector(".retry").style.display = "none";
+
+  function tick() {
+    left -= 1;
+    el.textContent = left;
+    if (left <= 0) location.reload();
+  }
+  document.getElementById("stop").addEventListener("click", function () {
+    clearInterval(timer);
+    document.querySelector(".retry").textContent = "автообновление выключено";
+    this.remove();
+  });
+</script>
+</body>
+</html>

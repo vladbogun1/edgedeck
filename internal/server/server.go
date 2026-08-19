@@ -22,10 +22,12 @@ import (
 	"github.com/vladbogun1/edgedeck/internal/caddyx"
 	"github.com/vladbogun1/edgedeck/internal/config"
 	"github.com/vladbogun1/edgedeck/internal/dockerinfo"
+	"github.com/vladbogun1/edgedeck/internal/errorpage"
 	"github.com/vladbogun1/edgedeck/internal/firewall"
 	"github.com/vladbogun1/edgedeck/internal/hostports"
 	"github.com/vladbogun1/edgedeck/internal/netcheck"
 	"github.com/vladbogun1/edgedeck/internal/notify"
+	"github.com/vladbogun1/edgedeck/internal/routes"
 	"github.com/vladbogun1/edgedeck/internal/state"
 	"github.com/vladbogun1/edgedeck/internal/webui"
 )
@@ -94,6 +96,15 @@ func Run(ctx context.Context, cfg config.Config) error {
 		CaddyHost:   caddyHostName(cfg.CaddyAdminURL),
 	}
 
+	// Страница «сервис не отвечает» кладётся при старте: она нужна в момент
+	// аварии, а значит должна лежать на диске заранее.
+	wwwDir := filepath.Join(cfg.EdgeDir, "www")
+	if err := errorpage.Ensure(wwwDir, func(path string, content []byte) error {
+		return routes.WriteFileAsDirOwner(path, content)
+	}); err != nil {
+		slog.Warn("не смог положить страницу ошибки", "dir", wwwDir, "err", err)
+	}
+
 	mux := http.NewServeMux()
 	a.routes(mux)
 
@@ -104,12 +115,16 @@ func Run(ctx context.Context, cfg config.Config) error {
 		IdleTimeout:       120 * time.Second,
 	}
 
+	// Самолечение привязок к сети работает всегда: это не уведомления, а условие
+	// того, что сайт не ляжет после редеплоя контейнера (см. reconcile.go).
+	go a.runReconciler(ctx)
+
 	if a.notify.Enabled() {
 		slog.Info("уведомления в Telegram включены")
-		go a.runWatcher(ctx)
 	} else {
 		slog.Info("уведомления в Telegram выключены: нет EDGEDECK_TELEGRAM_TOKEN/CHAT")
 	}
+	go a.runWatcher(ctx)
 
 	// Замеченные домены сбрасываем на диск по таймеру, а не на каждый запрос.
 	go func() {

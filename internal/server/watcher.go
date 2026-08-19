@@ -54,6 +54,8 @@ func (a *app) runWatcher(ctx context.Context) {
 }
 
 func (a *app) watchOnce(ctx context.Context) {
+	// Без уведомлений сторожу нечего делать: его выводы попадают только в чат.
+	// Самолечение сетей живёт отдельно и работает всегда (reconcile.go).
 	if !a.notify.Enabled() {
 		return
 	}

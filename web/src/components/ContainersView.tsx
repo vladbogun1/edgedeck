@@ -6,6 +6,7 @@ import { api, type Container } from "../api";
 // подключён к сети прокси (DESIGN.md §2.3).
 export function ContainersView() {
   const [list, setList] = useState<Container[] | null>(null);
+  const [hint, setHint] = useState("");
   const [error, setError] = useState("");
   const [probe, setProbe] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState("");
@@ -14,6 +15,7 @@ export function ContainersView() {
     try {
       const data = await api.containers();
       setList(data.containers);
+      setHint(data.compose_hint);
       setError("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "не загрузилось");
@@ -74,6 +76,17 @@ export function ContainersView() {
           )}
 
           {c.hint && <div className="mt-2 text-xs text-warn">{c.hint}</div>}
+
+          {c.reachability === "needs_edge" && hint && (
+            <details className="mt-2 text-xs text-muted">
+              <summary className="cursor-pointer">как закрепить сеть навсегда</summary>
+              <p className="mt-1">
+                Панель возвращает подключение сама, если контейнер пересоздали. Но правильнее прописать сеть в его
+                собственном docker-compose.yml — тогда лечить будет нечего:
+              </p>
+              <pre className="mt-1 overflow-x-auto rounded-md bg-ink px-2 py-1">{hint}</pre>
+            </details>
+          )}
 
           <div className="mt-3 flex flex-wrap items-center gap-2">
             {c.reachability === "needs_edge" && (

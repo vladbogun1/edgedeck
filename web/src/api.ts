@@ -196,7 +196,8 @@ export const api = {
     request<{ ok: boolean }>("/api/login", { method: "POST", body: JSON.stringify({ password }) }),
   logout: () => request<{ ok: boolean }>("/api/logout", { method: "POST" }),
   overview: () => request<Overview>("/api/overview"),
-  containers: () => request<{ containers: Container[]; networks: { name: string }[] }>("/api/containers"),
+  containers: () =>
+    request<{ containers: Container[]; networks: { name: string }[]; compose_hint: string }>("/api/containers"),
   ports: () =>
     request<{ available: boolean; error?: string; ports: HostPort[]; firewall_ok?: boolean; firewall_status?: string }>(
       "/api/ports",
