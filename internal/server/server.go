@@ -151,6 +151,14 @@ func (a *app) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/forget-domain", a.requireAuth(a.handleForgetDomain))
 	mux.HandleFunc("POST /api/password", a.requireAuth(a.handleChangePassword))
 
+	// Маршруты. Любая запись идёт только через транзакцию с откатом (DESIGN.md §5.2).
+	mux.HandleFunc("GET /api/routes", a.requireAuth(a.handleRoutesList))
+	mux.HandleFunc("POST /api/routes/save", a.requireAuth(a.handleRouteSave))
+	mux.HandleFunc("POST /api/routes/delete", a.requireAuth(a.handleRouteDelete))
+	mux.HandleFunc("POST /api/routes/import", a.requireAuth(a.handleRouteImport))
+	mux.HandleFunc("GET /api/snapshots", a.requireAuth(a.handleSnapshots))
+	mux.HandleFunc("POST /api/rollback", a.requireAuth(a.handleRollback))
+
 	mux.Handle("/", webui.Handler())
 }
 
