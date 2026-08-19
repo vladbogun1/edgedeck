@@ -305,15 +305,61 @@ func FindByID(list []Route, id string) (int, bool) {
 // поправить руками по SSH» превратилось бы в неправду (DESIGN.md §2.19).
 func WriteFileAsDirOwner(path string, content []byte) error {
 	dir := filepath.Dir(path)
+
+	// Владельца берём у ближайшего СУЩЕСТВУЮЩЕГО каталога выше: если каталог
+	// создаём мы сами, его владельцем стал бы root, и файл унаследовал бы root —
+	// то есть по SSH его было бы не поправить.
+	uid, gid, haveOwner := ownerOf(nearestExisting(dir))
+	missing := missingDirs(dir)
+
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
+	if haveOwner {
+		// Отдаём владельцу ТОЛЬКО те каталоги, которых до нас не было.
+		for _, d := range missing {
+			_ = os.Chown(d, uid, gid)
+		}
+	}
+
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, content, 0o644); err != nil {
 		return err
 	}
-	if uid, gid, ok := ownerOf(dir); ok {
+	if haveOwner {
 		_ = os.Chown(tmp, uid, gid)
 	}
 	return os.Rename(tmp, path)
+}
+
+// nearestExisting поднимается вверх по пути до первого каталога, который есть.
+func nearestExisting(dir string) string {
+	for {
+		if _, err := os.Stat(dir); err == nil {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return dir
+		}
+		dir = parent
+	}
+}
+
+// missingDirs — каталоги, которых сейчас нет и которые создаст MkdirAll.
+// Считается ДО создания: только их потом и можно отдавать другому владельцу,
+// трогать чужие существующие каталоги нельзя.
+func missingDirs(dir string) []string {
+	var out []string
+	for {
+		if _, err := os.Stat(dir); err == nil {
+			return out
+		}
+		out = append(out, dir)
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return out
+		}
+		dir = parent
+	}
 }
