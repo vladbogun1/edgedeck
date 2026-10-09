@@ -17,6 +17,14 @@ const (
 	ErrorPageFile = "error.html"
 )
 
+// HideStack срезает с ответа то, что выдаёт начинку сайта: версию nginx за
+// прокси, «X-Powered-By: Next.js», «Via: 1.1 Caddy». Защиты это не даёт —
+// сканеры узнают софт и по поведению, — но и раздавать версии незачем.
+// Удаление в Caddy отложенное, поэтому срабатывает и на заголовки, пришедшие
+// от цели reverse_proxy. Ставится в каждый сайт, независимо от import common:
+// common подключён не везде.
+const HideStack = "\theader {\n\t\t-Server\n\t\t-X-Powered-By\n\t\t-Via\n\t}\n"
+
 // Render собирает файлы sites/*.caddy из маршрутов: имя файла → содержимое.
 //
 // Один домен = один файл, даже если у него несколько маршрутов по путям:
@@ -58,6 +66,7 @@ func renderDomain(domain string, list []Route) string {
 		}
 	}
 	fmt.Fprintf(&b, "\n%s {\n", strings.Join(addresses, ", "))
+	b.WriteString(HideStack)
 
 	// Общие для домена вещи берём у первого маршрута: заголовки и HSTS
 	// относятся к сайту целиком, а не к отдельному пути.

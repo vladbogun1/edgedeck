@@ -14,6 +14,10 @@
 # HTTP: и панель, и проверки ACME. Редиректа на https здесь нет намеренно —
 # по IP валидного сертификата не будет, а панель должна открываться и так.
 :80 {
+	header {
+		-Server
+		-Via
+	}
 	reverse_proxy edgedeck:4000 {
 		header_up X-Real-IP {remote_host}
 	}
@@ -30,6 +34,10 @@
 # на месте (on_demand), разрешение спрашивается у панели — см. блок on_demand_tls
 # в Caddyfile.
 https:// {
+	header {
+		-Server
+		-Via
+	}
 	tls {
 		on_demand
 	}
@@ -52,6 +60,10 @@ https:// {
 # же порту приводил к висящему рукопожатию для соединений без SNI, а браузеры
 # для IP-адресов SNI не отправляют.
 https://__SERVER_IP__ {
+	header {
+		-Server
+		-Via
+	}
 	tls /etc/caddy/certs/ip.crt /etc/caddy/certs/ip.key
 	reverse_proxy edgedeck:4000 {
 		header_up X-Real-IP {remote_host}

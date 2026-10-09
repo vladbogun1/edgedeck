@@ -1,7 +1,7 @@
 # EdgeDeck — панель маршрутизации сервера
 
 > Дизайн-документ. Версия 1, 19 августа 2026.
-> Сервер: `150.136.40.217` (oracle-3), каталог проекта на машине: `D:\CLOUDE\edgedeck`.
+> Сервер: `150.136.40.217` (oracle-3), каталог проекта на машине: `D:\CLOUDE\apps\edgedeck`.
 > Наследник `~/edge` (Caddy) — не выбрасываем, а обрастаем панелью вокруг него.
 
 ---
@@ -930,7 +930,7 @@ EdgeDeck · oracle-3          CPU 4% · RAM 0.9/12 ГБ · диск 12/194 ГБ 
 (и Go локально не установлен — проверка компиляции идёт через `docker run golang`).
 
 ```
-D:\CLOUDE\edgedeck  ──git push──→  github.com/vladbogun1/edgedeck (private)
+D:\CLOUDE\apps\edgedeck  ──git push──→  github.com/vladbogun1/edgedeck (private)
                                             │
                                      GitHub Actions
                                      ├─ go vet + тесты

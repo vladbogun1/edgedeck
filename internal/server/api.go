@@ -42,19 +42,11 @@ func (a *app) handleLogin(w http.ResponseWriter, r *http.Request) {
 			})
 		default:
 			// Ответ намеренно скупой: форму видно на любом ненастроенном домене.
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "неверный пароль"})
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "неверный пароль"})
 		}
 		return
 	}
-	http.SetCookie(w, &http.Cookie{
-		Name:     sessionCookie,
-		Value:    sess.Token,
-		Path:     "/",
-		Expires:  sess.Expires,
-		HttpOnly: true,
-		Secure:   r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https"),
-		SameSite: http.SameSiteLaxMode,
-	})
+	a.startSession(w, r, sess)
 	a.state.Audit("login", ip, "вход в панель", map[string]any{"host": r.Host})
 	a.notifyEvent("login", "🔑 вход в панель с адреса "+ip+"\nдомен: "+r.Host)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})

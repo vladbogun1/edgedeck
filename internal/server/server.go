@@ -46,6 +46,8 @@ type app struct {
 	tlsAsk   *askLimiter
 	trust    *trustStore
 	public   *publicCache
+	meta     *metaCache
+	otp      *otpStore
 	applier  *apply.Applier
 	firewall *firewall.Reader
 	notify   *notify.Notifier
@@ -87,6 +89,8 @@ func Run(ctx context.Context, cfg config.Config) error {
 		tlsAsk:   newAskLimiter(cfg.TLSAskLimit),
 		trust:    newTrustStore(cfg.DataDir, cfg.EdgeDir),
 		public:   newPublicCache(),
+		meta:     newMetaCache(),
+		otp:      newOTPStore(),
 		firewall: firewall.New(cfg.FirewallFile),
 		notify:   notify.New(notify.LoadConfig()),
 		watch:    newWatchState(),
@@ -169,6 +173,9 @@ func (a *app) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/public/sites", a.handlePublicSites)
 
 	mux.HandleFunc("POST /api/login", a.handleLogin)
+	mux.HandleFunc("GET /api/login/methods", a.handleLoginMethods)
+	mux.HandleFunc("POST /api/login/telegram/send", a.handleOTPSend)
+	mux.HandleFunc("POST /api/login/telegram", a.handleOTPLogin)
 	mux.HandleFunc("POST /api/logout", a.handleLogout)
 	mux.HandleFunc("GET /api/session", a.handleSession)
 

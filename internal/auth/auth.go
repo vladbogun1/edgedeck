@@ -135,6 +135,12 @@ func (s *Store) Login(password, ip, userAgent string) (*Session, error) {
 		return nil, ErrBadPassword
 	}
 
+	return s.Issue(ip, userAgent)
+}
+
+// Issue выдаёт сессию тому, кто уже доказал, что он свой: паролем или кодом из
+// Telegram. Счётчик неудачных попыток с этого адреса сбрасывается.
+func (s *Store) Issue(ip, userAgent string) (*Session, error) {
 	token, err := randomToken()
 	if err != nil {
 		return nil, err
@@ -154,6 +160,26 @@ func (s *Store) Login(password, ip, userAgent string) (*Session, error) {
 	s.saveSessionsLocked()
 	s.mu.Unlock()
 	return sess, nil
+}
+
+// Locked — адрес исчерпал попытки входа (общий счётчик для пароля и кода).
+func (s *Store) Locked(ip string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	w := s.attempts[ip]
+	return w != nil && w.count >= maxAttempts && time.Now().Before(w.until)
+}
+
+// Fail засчитывает неудачную попытку входа с адреса.
+func (s *Store) Fail(ip string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	w := s.attempts[ip]
+	if w == nil || time.Now().After(w.until) {
+		w = &attemptCounter{until: time.Now().Add(attemptWindowLen)}
+		s.attempts[ip] = w
+	}
+	w.count++
 }
 
 // Check возвращает сессию по токену, если она жива.

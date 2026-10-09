@@ -24,9 +24,13 @@ import (
 //   - домены из «пришли, но не настроены» (их ещё нет в природе, это планы и опечатки);
 //   - имя сервера, адрес, версия, порты, сертификаты, журнал.
 type publicSite struct {
-	Domain string `json:"domain"`
-	Kind   string `json:"kind"`   // сайт | статика | редирект
-	Online bool   `json:"online"` // цель отвечает
+	Domain      string `json:"domain"`
+	Kind        string `json:"kind"`   // сайт | статика | редирект
+	Online      bool   `json:"online"` // сайт отвечает посетителю
+	Title       string `json:"title,omitempty"`
+	Description string `json:"description,omitempty"`
+	Icon        string `json:"icon,omitempty"`  // ссылка на иконку самого сайта
+	Image       string `json:"image,omitempty"` // og:image для превью
 }
 
 type publicCache struct {
@@ -96,27 +100,16 @@ func (a *app) buildPublicSites(ctx context.Context) []publicSite {
 		}
 		ps := publicSite{Domain: domain, Kind: kindLabel(s.Kind)}
 
-		host, port, ok := proxyTarget(s)
-		if !ok {
-			// Статика и редиректы: цели-контейнера нет, проверять нечего.
-			ps.Online = true
-			mu.Lock()
-			results = append(results, result{ps, i})
-			mu.Unlock()
-			continue
-		}
-
 		wg.Add(1)
-		go func(ps publicSite, host string, port, i int) {
+		go func(ps publicSite, s sites.Site, i int) {
 			defer wg.Done()
-			probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			probeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 			defer cancel()
-			res := a.net.Probe(probeCtx, host, port, ps.Domain)
-			ps.Online = res.TCPOpen
+			ps = a.fillPublicSite(probeCtx, ps, s)
 			mu.Lock()
 			results = append(results, result{ps, i})
 			mu.Unlock()
-		}(ps, host, port, i)
+		}(ps, s, i)
 	}
 	wg.Wait()
 
@@ -126,6 +119,31 @@ func (a *app) buildPublicSites(ctx context.Context) []publicSite {
 		out = append(out, r.site)
 	}
 	return out
+}
+
+// fillPublicSite проверяет сайт через Caddy (sitemeta.go) и подставляет визитку.
+// Если до Caddy по :443 не достучаться (сервер только на :80), остаётся старая
+// проверка: открыт ли порт цели из сети панели.
+func (a *app) fillPublicSite(ctx context.Context, ps publicSite, s sites.Site) publicSite {
+	if m, ok := a.probeSite(ctx, ps.Domain); ok {
+		ps.Online = m.Online
+		// Лежащий сайт визитку не отдаст — показываем последнюю известную.
+		if m.Online {
+			a.meta.put(ps.Domain, m)
+		} else if cached, hit := a.meta.get(ps.Domain); hit {
+			m = cached
+		}
+		ps.Title, ps.Description, ps.Icon, ps.Image = m.Title, m.Description, m.Icon, m.Image
+		return ps
+	}
+	host, port, ok := proxyTarget(s)
+	if !ok {
+		// Статика и редиректы: цели-контейнера нет, проверять нечего.
+		ps.Online = true
+		return ps
+	}
+	ps.Online = a.net.Probe(ctx, host, port, ps.Domain).TCPOpen
+	return ps
 }
 
 // firstDomain — первое настоящее имя сайта. «:80» и «https://» пропускаем:

@@ -122,11 +122,16 @@ export type Event = {
   message: string;
 };
 
-// Публичная витрина: наружу отдаются только имена доменов и признак «отвечает».
+// Публичная витрина: имя домена, «отвечает» и визитка, которую сайт сам о себе
+// публикует (title, description, иконка, og:image).
 export type PublicSite = {
   domain: string;
   kind: string;
   online: boolean;
+  title?: string;
+  description?: string;
+  icon?: string;
+  image?: string;
 };
 
 // ---- маршруты (этап 1) ----
@@ -197,6 +202,10 @@ export const api = {
   session: () => request<{ authenticated: boolean }>("/api/session"),
   login: (password: string) =>
     request<{ ok: boolean }>("/api/login", { method: "POST", body: JSON.stringify({ password }) }),
+  loginMethods: () => request<{ telegram: boolean }>("/api/login/methods"),
+  sendCode: () => request<{ challenge: string }>("/api/login/telegram/send", { method: "POST" }),
+  loginCode: (challenge: string, code: string) =>
+    request<{ ok: boolean }>("/api/login/telegram", { method: "POST", body: JSON.stringify({ challenge, code }) }),
   logout: () => request<{ ok: boolean }>("/api/logout", { method: "POST" }),
   overview: () => request<Overview>("/api/overview"),
   containers: () =>
