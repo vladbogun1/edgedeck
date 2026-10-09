@@ -1,4 +1,4 @@
-# Ставит или обновляет скилл Claude Code «edgedeck» из GitHub.
+﻿# Ставит или обновляет скилл Claude Code «edgedeck» из GitHub.
 #
 #   powershell -ExecutionPolicy Bypass -File skills\sync.ps1            # из main
 #   powershell -ExecutionPolicy Bypass -File skills\sync.ps1 -Ref <ветка|тег>
