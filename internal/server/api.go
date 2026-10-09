@@ -114,9 +114,10 @@ type askLimiter struct {
 }
 
 type askVerdict struct {
-	allowed bool
-	until   time.Time
-	reason  string
+	allowed    bool
+	pointsHere bool
+	until      time.Time
+	reason     string
 }
 
 func newAskLimiter(limit int) *askLimiter {
@@ -135,17 +136,25 @@ func (l *askLimiter) cached(domain string) (askVerdict, bool) {
 
 // remember кеширует ответ: разрешение на 5 минут, отказ на час — чтобы чужой
 // домен, направленный на нас, не устраивал шторм DNS-запросов.
-func (l *askLimiter) remember(domain string, allowed bool, reason string) {
+func (l *askLimiter) remember(domain string, allowed, pointsHere bool, reason string) {
 	ttl := time.Hour
 	if allowed {
 		ttl = 5 * time.Minute
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	l.cache[domain] = askVerdict{allowed: allowed, until: time.Now().Add(ttl), reason: reason}
+	l.cache[domain] = askVerdict{allowed: allowed, pointsHere: pointsHere, until: time.Now().Add(ttl), reason: reason}
 	if allowed {
 		l.granted = append(l.granted, time.Now())
 	}
+}
+
+// reset забывает закешированные ответы: после одобрения зоны отказ, выданный
+// час назад, не должен держать сертификат ещё час.
+func (l *askLimiter) reset() {
+	l.mu.Lock()
+	l.cache = map[string]askVerdict{}
+	l.mu.Unlock()
 }
 
 func (l *askLimiter) overLimit() bool {
@@ -174,21 +183,33 @@ func (a *app) handleTLSAsk(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if v, ok := a.tlsAsk.cached(domain); ok {
-		a.state.NoteHost(domain, true, v.allowed)
+		a.state.NoteAsk(domain, v.allowed, v.pointsHere)
 		respondAsk(w, v.allowed)
+		return
+	}
+	// Чужая зона: сертификат не выпускаем, даже если A-запись смотрит сюда, —
+	// иначе чужой фишинг получает рабочий https на нашем адресе (trust.go).
+	// DNS всё равно проверяем: «смотрит сюда» отличает чей-то домен, всерьёз
+	// направленный на нас, от сканера с подставленным именем.
+	if !a.trust.Trusted(domain) {
+		check := a.net.CheckDomain(r.Context(), domain)
+		a.tlsAsk.remember(domain, false, check.PointsHere, "чужая зона")
+		a.state.NoteAsk(domain, false, check.PointsHere)
+		slog.Warn("отказ в сертификате: чужая зона", "domain", domain, "смотрит_сюда", check.PointsHere)
+		respondAsk(w, false)
 		return
 	}
 	if a.tlsAsk.overLimit() {
 		slog.Warn("отказ в сертификате: лимит новых доменов в час", "domain", domain)
-		a.state.NoteHost(domain, true, false)
+		a.state.NoteAsk(domain, false, false)
 		a.state.Audit("tls_ask_denied", "caddy", "лимит новых доменов в час", map[string]any{"domain": domain})
 		respondAsk(w, false)
 		return
 	}
 
 	check := a.net.CheckDomain(r.Context(), domain)
-	a.tlsAsk.remember(domain, check.PointsHere, check.Message)
-	a.state.NoteHost(domain, true, check.PointsHere)
+	a.tlsAsk.remember(domain, check.PointsHere, check.PointsHere, check.Message)
+	a.state.NoteAsk(domain, check.PointsHere, check.PointsHere)
 	if check.PointsHere {
 		slog.Info("разрешил сертификат", "domain", domain)
 		a.state.Audit("tls_ask_allowed", "caddy", "разрешён сертификат", map[string]any{"domain": domain})
@@ -211,7 +232,7 @@ func respondAsk(w http.ResponseWriter, allowed bool) {
 type overview struct {
 	Server      serverInfo           `json:"server"`
 	Sites       []sites.Site         `json:"sites"`
-	SeenDomains []state.SeenDomain   `json:"seen_domains"`
+	SeenDomains []seenView           `json:"seen_domains"`
 	Certs       []caddyx.Certificate `json:"certificates"`
 	Warnings    []warning            `json:"warnings"`
 	Caddy       caddyStatus          `json:"caddy"`
@@ -264,7 +285,7 @@ func (a *app) handleOverview(w http.ResponseWriter, r *http.Request) {
 			Version:  version.Version,
 		},
 		Sites:       siteList,
-		SeenDomains: a.state.Seen(sites.Domains(siteList)),
+		SeenDomains: a.seenViews(sites.Domains(siteList)),
 		Certs:       certs,
 		Caddy:       caddyStatus{Alive: alive, Message: aliveMsg},
 	}
@@ -514,6 +535,51 @@ func (a *app) handleForgetDomain(w http.ResponseWriter, r *http.Request) {
 	}
 	a.state.Forget(req.Domain)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// seenView — замеченный домен с пометкой, свой он или чужой (trust.go).
+type seenView struct {
+	state.SeenDomain
+	Zone    string `json:"zone"`
+	Foreign bool   `json:"foreign"`
+}
+
+func (a *app) seenViews(configured []string) []seenView {
+	list := a.state.Seen(configured)
+	out := make([]seenView, 0, len(list))
+	for _, d := range list {
+		out = append(out, seenView{SeenDomain: d, Zone: zoneOf(d.Host), Foreign: !a.trust.Trusted(d.Host)})
+	}
+	return out
+}
+
+// handleTrustZone — кнопка «это мой домен» (или отмена): зона домена становится
+// своей, и панель начинает ему отвечать и выпускать сертификаты.
+func (a *app) handleTrustZone(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Domain  string `json:"domain"`
+		Trusted bool   `json:"trusted"`
+	}
+	if err := decode(r, &req); err != nil || req.Domain == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "нужен домен"})
+		return
+	}
+	zone, err := a.trust.Approve(req.Domain, req.Trusted)
+	if zone == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "это не доменное имя"})
+		return
+	}
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	a.tlsAsk.reset()
+	msg := "зона " + zone + " отмечена своей"
+	if !req.Trusted {
+		msg = "зона " + zone + " больше не своя"
+	}
+	a.state.Audit("trust_zone", clientIP(r), msg, map[string]any{"zone": zone, "trusted": req.Trusted})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "zone": zone, "message": msg})
 }
 
 // ---- вспомогательное ----

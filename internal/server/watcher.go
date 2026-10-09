@@ -138,8 +138,38 @@ func (a *app) checkUnconfigured(ctx context.Context) {
 	for _, r := range cfg.Routes {
 		names = append(names, r.Domain)
 	}
+	// Чужие зоны собираем вместе: wildcard-запись даёт сотни имён одной зоны,
+	// и сообщение про каждое было бы спамом.
+	type foreignZone struct {
+		names int
+		hits  int
+		top   string
+	}
+	foreign := map[string]*foreignZone{}
 	for _, d := range a.state.Seen(names) {
-		if configured[d.Host] || d.Hits < 3 {
+		if configured[d.Host] {
+			continue
+		}
+		if !a.trust.Trusted(d.Host) {
+			// Сканер с подставленным Host (www.google.com) — не новость. Новость —
+			// чужой домен, чья A-запись действительно смотрит на нас.
+			if !d.PointsHere {
+				continue
+			}
+			z := zoneOf(d.Host)
+			fz := foreign[z]
+			if fz == nil {
+				fz = &foreignZone{}
+				foreign[z] = fz
+			}
+			fz.names++
+			fz.hits += d.Hits
+			if fz.top == "" {
+				fz.top = d.Host
+			}
+			continue
+		}
+		if d.Hits < 3 {
 			continue
 		}
 		// Домен, который смотрит не на нас, — это сканер с подставленным Host
@@ -151,6 +181,12 @@ func (a *app) checkUnconfigured(ctx context.Context) {
 		}
 		a.notify.Once(ctx, "seen:"+d.Host, 7*24*time.Hour,
 			fmt.Sprintf("🔵 на сервер пришёл домен <b>%s</b> без маршрута, и его A-запись смотрит сюда.\nЗайдите в панель и настройте его — или забудьте в списке", d.Host))
+	}
+	for z, fz := range foreign {
+		a.notify.Once(ctx, "foreign:"+z, 30*24*time.Hour,
+			fmt.Sprintf("🛡 чужой домен <b>%s</b> направлен на этот сервер (имён: %d, заходов: %d, например %s).\n"+
+				"Панель ему не отвечает, сертификат не выпускается — делать ничего не нужно. "+
+				"Если это всё-таки ваш домен — нажмите «это мой домен» в панели", z, fz.names, fz.hits, fz.top))
 	}
 }
 

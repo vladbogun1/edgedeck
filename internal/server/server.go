@@ -44,6 +44,7 @@ type app struct {
 	net    *netcheck.Checker
 
 	tlsAsk   *askLimiter
+	trust    *trustStore
 	public   *publicCache
 	applier  *apply.Applier
 	firewall *firewall.Reader
@@ -84,6 +85,7 @@ func Run(ctx context.Context, cfg config.Config) error {
 		ports:    hostports.New(cfg.HostProcDir),
 		net:      netcheck.New(cfg.PublicIP),
 		tlsAsk:   newAskLimiter(cfg.TLSAskLimit),
+		trust:    newTrustStore(cfg.DataDir, cfg.EdgeDir),
 		public:   newPublicCache(),
 		firewall: firewall.New(cfg.FirewallFile),
 		notify:   notify.New(notify.LoadConfig()),
@@ -179,6 +181,7 @@ func (a *app) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/probe", a.requireAuth(a.handleProbe))
 	mux.HandleFunc("POST /api/connect-edge", a.requireAuth(a.handleConnectEdge))
 	mux.HandleFunc("POST /api/forget-domain", a.requireAuth(a.handleForgetDomain))
+	mux.HandleFunc("POST /api/trust-zone", a.requireAuth(a.handleTrustZone))
 	mux.HandleFunc("POST /api/password", a.requireAuth(a.handleChangePassword))
 
 	// Маршруты. Любая запись идёт только через транзакцию с откатом (DESIGN.md §5.2).
@@ -195,11 +198,17 @@ func (a *app) routes(mux *http.ServeMux) {
 }
 
 // middleware отмечает каждый Host, который к нам пришёл: именно так панель
-// узнаёт про домены, у которых ещё нет маршрута.
+// узнаёт про домены, у которых ещё нет маршрута. Чужим доменам (trust.go) панель
+// не отдаёт ничего — ни формы входа, ни витрины: 421 без тела.
 func (a *app) middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasPrefix(r.URL.Path, "/internal/") && !strings.HasPrefix(r.URL.Path, "/healthz") {
-			a.state.NoteHost(r.Host, false, false)
+			a.state.NoteHost(r.Host)
+			if !a.trust.Trusted(r.Host) {
+				w.Header().Set("Connection", "close")
+				w.WriteHeader(http.StatusMisdirectedRequest)
+				return
+			}
 		}
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "same-origin")

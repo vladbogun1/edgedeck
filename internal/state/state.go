@@ -27,7 +27,12 @@ type SeenDomain struct {
 	Hits       int       `json:"hits"`
 	TLSAsked   bool      `json:"tls_asked"` // Caddy спрашивал разрешение на сертификат
 	TLSAllowed bool      `json:"tls_allowed"`
+	PointsHere bool      `json:"points_here"` // A-запись смотрит на этот сервер (на момент вопроса Caddy)
 }
+
+// maxSeen — потолок списка. Чужая wildcard-запись на наш адрес порождает имена
+// без конца (www.www.www.mail.…), и файл не должен расти вместе с ними.
+const maxSeen = 1000
 
 type Store struct {
 	seenFile  string
@@ -55,7 +60,18 @@ func NewStore(seenFile, auditFile string) *Store {
 
 // NoteHost отмечает, что на панель пришёл запрос с таким Host.
 // Порт и регистр отбрасываем: «Example.COM:443» и «example.com» — одно и то же.
-func (s *Store) NoteHost(host string, tlsAsked, tlsAllowed bool) {
+func (s *Store) NoteHost(host string) {
+	s.note(host, func(*SeenDomain) {})
+}
+
+// NoteAsk отмечает вопрос Caddy о сертификате и ответ на него.
+func (s *Store) NoteAsk(host string, allowed, pointsHere bool) {
+	s.note(host, func(d *SeenDomain) {
+		d.TLSAsked, d.TLSAllowed, d.PointsHere = true, allowed, pointsHere
+	})
+}
+
+func (s *Store) note(host string, update func(*SeenDomain)) {
 	host = normalizeHost(host)
 	// Голые адреса и внутренние имена — не домены: заход по IP, обращения между
 	// контейнерами (edge_caddy) и проверки самой панели в списке «пришли, но не
@@ -68,16 +84,28 @@ func (s *Store) NoteHost(host string, tlsAsked, tlsAllowed bool) {
 	defer s.mu.Unlock()
 	d, ok := s.seen[host]
 	if !ok {
+		if len(s.seen) >= maxSeen {
+			s.dropOldestLocked()
+		}
 		d = &SeenDomain{Host: host, FirstSeen: now}
 		s.seen[host] = d
 	}
 	d.LastSeen = now
 	d.Hits++
-	if tlsAsked {
-		d.TLSAsked = true
-		d.TLSAllowed = tlsAllowed
-	}
+	update(d)
 	s.dirty = true
+}
+
+func (s *Store) dropOldestLocked() {
+	var oldest *SeenDomain
+	for _, d := range s.seen {
+		if oldest == nil || d.LastSeen.Before(oldest.LastSeen) {
+			oldest = d
+		}
+	}
+	if oldest != nil {
+		delete(s.seen, oldest.Host)
+	}
 }
 
 // Seen отдаёт замеченные домены, кроме тех, что уже настроены.

@@ -19,6 +19,9 @@ export type SeenDomain = {
   hits: number;
   tls_asked: boolean;
   tls_allowed: boolean;
+  points_here: boolean;
+  zone: string;
+  foreign: boolean; // чужая зона: панель не отвечает, сертификат не выпускается
 };
 
 export type Certificate = {
@@ -247,4 +250,9 @@ export const api = {
     request<{ ok: boolean; message: string }>("/api/rollback", { method: "POST", body: JSON.stringify({ name }) }),
   forgetDomain: (domain: string) =>
     request<{ ok: boolean }>("/api/forget-domain", { method: "POST", body: JSON.stringify({ domain }) }),
+  trustZone: (domain: string, trusted: boolean) =>
+    request<{ ok: boolean; zone: string; message: string }>("/api/trust-zone", {
+      method: "POST",
+      body: JSON.stringify({ domain, trusted }),
+    }),
 };
