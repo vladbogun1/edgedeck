@@ -13,9 +13,11 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/vladbogun1/edgedeck/internal/agent"
@@ -28,6 +30,10 @@ import (
 func main() {
 	agentMode := flag.Bool("agent", false, "запустить сайдкар доступа к Docker вместо панели")
 	firewallMode := flag.Bool("firewall", false, "запустить сборщик правил фаервола (только чтение, никуда не слушает)")
+	planMode := flag.Bool("plan", false, "показать, что изменит routes.yaml, и проверить конфиг в Caddy (ничего не записывает)")
+	applyMode := flag.Bool("apply", false, "применить routes.yaml: снимок, запись, контроль, откат при поломке")
+	adoptList := flag.String("adopt", "", "файлы руками через запятую, которые разрешено заменить сгенерированными")
+	reason := flag.String("reason", "", "что меняем — попадёт в снимок и журнал")
 	flag.Parse()
 
 	log := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -61,6 +67,20 @@ func main() {
 		log.Error("конфигурация не загрузилась", "err", err)
 		os.Exit(1)
 	}
+	if *planMode || *applyMode {
+		var adopt []string
+		for _, f := range strings.Split(*adoptList, ",") {
+			if f = strings.TrimSpace(f); f != "" {
+				adopt = append(adopt, f)
+			}
+		}
+		if err := server.RunCLI(ctx, cfg, *applyMode, adopt, *reason, os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "ошибка:", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	log.Info("edgedeck", "version", version.Version, "listen", cfg.Listen, "edge_dir", cfg.EdgeDir)
 	if err := server.Run(ctx, cfg); err != nil {
 		log.Error("панель остановилась с ошибкой", "err", err)

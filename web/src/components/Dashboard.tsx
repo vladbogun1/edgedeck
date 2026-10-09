@@ -455,6 +455,10 @@ function RouteRow({
           </a>
           {site && <LiveChip online={site.online} />}
           {r.hsts && <span className="chip chip-accent">HSTS</span>}
+          {r.auth?.upstream && <span className="chip chip-accent">вход</span>}
+          {(r.headers?.length ?? 0) > 0 && <span className="chip">свои заголовки</span>}
+          {r.compress && <span className="chip">сжатие</span>}
+          {r.acme_webroot && <span className="chip">certbot webroot</span>}
         </div>
         <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted">
           <ArrowRight className="size-3 shrink-0" />

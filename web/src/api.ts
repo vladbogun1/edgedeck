@@ -155,6 +155,14 @@ export type Route = {
   allow_ips?: string[];
   deny_paths?: string[];
   comment?: string;
+  // Возможности, без которых сайты раньше оставались «руками».
+  headers?: { name: string; value: string }[];
+  compress?: boolean;
+  path_redirects?: { from: string; to: string; code?: number }[];
+  acme_webroot?: string;
+  flush?: boolean;
+  dial_timeout?: string;
+  auth?: { upstream: string; uri: string; copy_headers?: string[]; header_up?: { name: string; value: string }[] } | null;
 };
 
 export type RouteView = Route & { id: string; target_addr: string };
@@ -208,7 +216,15 @@ export const api = {
   loginCode: (challenge: string, code: string) =>
     request<{ ok: boolean }>("/api/login/telegram", { method: "POST", body: JSON.stringify({ challenge, code }) }),
   logout: () => request<{ ok: boolean }>("/api/logout", { method: "POST" }),
-  overview: () => request<Overview>("/api/overview"),
+  // Go отдаёт пустой список как null — приводим к [], чтобы экраны не падали.
+  overview: () =>
+    request<Overview>("/api/overview").then((o) => ({
+      ...o,
+      sites: o.sites ?? [],
+      seen_domains: o.seen_domains ?? [],
+      certificates: o.certificates ?? [],
+      warnings: o.warnings ?? [],
+    })),
   containers: () =>
     request<{ containers: Container[]; networks: { name: string }[]; compose_hint: string }>("/api/containers"),
   ports: () =>

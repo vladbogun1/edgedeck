@@ -172,6 +172,10 @@ func (c *Client) convert(r rawContainer) Container {
 	}
 	sort.Strings(out.Networks)
 
+	// Пустые списки отдаём как [], а не null: у контейнера без опубликованных
+	// портов (боты, экспортёры, network_mode: host) интерфейс падал на .length.
+	out.Networks = append([]string{}, out.Networks...)
+	out.Ports = []ContainerPort{}
 	seen := map[string]bool{}
 	for _, p := range r.Ports {
 		key := fmt.Sprintf("%d/%s/%s", p.PrivatePort, p.Type, p.IP)

@@ -18,7 +18,15 @@ export function ContainersView() {
   async function reload() {
     try {
       const data = await api.containers();
-      setList(data.containers);
+      // Старые версии сервера отдавали null вместо пустых списков.
+      setList(
+        (data.containers ?? []).map((c) => ({
+          ...c,
+          networks: c.networks ?? [],
+          ports: c.ports ?? [],
+          compose: c.compose ?? { project: "", service: "", working_dir: "" },
+        })),
+      );
       setHint(data.compose_hint);
       setError("");
     } catch (e) {

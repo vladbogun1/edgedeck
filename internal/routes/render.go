@@ -65,12 +65,43 @@ func renderDomain(domain string, list []Route) string {
 			fmt.Fprintf(&b, "#\n# %s: %s\n", r.Path, r.Comment)
 		}
 	}
+	// Общие для домена вещи берём у корневого маршрута («/»), а если его нет — у
+	// первого: заголовки и HSTS относятся к сайту целиком, а не к отдельному пути.
+	head := list[0]
+	for _, r := range list {
+		if r.Path == "/" {
+			head = r
+			break
+		}
+	}
+
+	if head.ACMEWebroot != "" {
+		b.WriteString(renderACMEBlock(domain, addresses, head))
+	}
+
 	fmt.Fprintf(&b, "\n%s {\n", strings.Join(addresses, ", "))
 	b.WriteString(HideStack)
 
-	// Общие для домена вещи берём у первого маршрута: заголовки и HSTS
-	// относятся к сайту целиком, а не к отдельному пути.
-	head := list[0]
+	if head.Compress {
+		b.WriteString("\tencode zstd gzip\n")
+	}
+	if len(head.Headers) > 0 {
+		b.WriteString("\theader {\n")
+		for _, h := range head.Headers {
+			b.WriteString("\t\t" + headerLine(h) + "\n")
+		}
+		b.WriteString("\t}\n")
+	}
+	if len(head.PathRedirects) > 0 {
+		b.WriteString("\n")
+		for _, pr := range head.PathRedirects {
+			code := pr.Code
+			if code == 0 {
+				code = 301
+			}
+			fmt.Fprintf(&b, "\tredir %s %s %d\n", pr.From, pr.To, code)
+		}
+	}
 	if head.SecurityHeaders {
 		b.WriteString("\timport common\n")
 	}
@@ -88,16 +119,30 @@ func renderDomain(domain string, list []Route) string {
 	if len(head.DenyPaths) > 0 {
 		fmt.Fprintf(&b, "\n\t# Закрытые пути: 404, а не 403 — не подтверждаем, что эндпоинт есть\n")
 		for _, p := range head.DenyPaths {
-			fmt.Fprintf(&b, "\thandle %s {\n\t\trespond \"\" 404\n\t}\n", pathPattern(p))
+			fmt.Fprintf(&b, "\thandle %s {\n\t\trespond \"\" 404\n\t}\n", denyPattern(p))
 		}
 	}
 
+	// Если у сайта есть другие handle (пути или закрытые пути), корень тоже
+	// уходит в свой handle — как в файлах, написанных руками: так обработчики
+	// взаимоисключающие и порядок директив Caddy ни на что не влияет.
+	wrapRoot := len(list) > 1 || len(head.DenyPaths) > 0
 	for _, r := range list {
 		b.WriteString("\n")
-		if r.Path == "/" {
+		switch {
+		case r.Path == "/" && !wrapRoot:
 			b.WriteString(indent(renderBody(r, domain), "\t"))
-		} else {
+		case r.Path == "/":
+			b.WriteString("\thandle {\n")
+			b.WriteString(indent(renderBody(r, domain), "\t\t"))
+			b.WriteString("\t}\n")
+		default:
 			fmt.Fprintf(&b, "\thandle %s {\n", pathPattern(r.Path))
+			// Размер загрузки у отдельного пути — свой (Vaultwarden на /vault/),
+			// у корня он уже выставлен на весь сайт выше.
+			if r.MaxUpload != "" {
+				fmt.Fprintf(&b, "\t\trequest_body {\n\t\t\tmax_size %s\n\t\t}\n", r.MaxUpload)
+			}
 			b.WriteString(indent(renderBody(r, domain), "\t\t"))
 			b.WriteString("\t}\n")
 		}
@@ -126,7 +171,14 @@ func renderBody(r Route, domain string) string {
 
 	if r.Auth != nil && r.Auth.Upstream != "" {
 		fmt.Fprintf(&b, "# Требовать вход: спрашиваем у %s, есть ли активная сессия\n", r.Auth.Upstream)
-		fmt.Fprintf(&b, "forward_auth %s {\n\turi %s\n\tcopy_headers Cookie\n}\n", r.Auth.Upstream, r.Auth.URI)
+		fmt.Fprintf(&b, "forward_auth %s {\n\turi %s\n", r.Auth.Upstream, r.Auth.URI)
+		for _, h := range r.Auth.HeaderUp {
+			fmt.Fprintf(&b, "\theader_up %s %s\n", h.Name, quoteValue(h.Value))
+		}
+		if len(r.Auth.CopyHeaders) > 0 {
+			fmt.Fprintf(&b, "\tcopy_headers %s\n", strings.Join(r.Auth.CopyHeaders, " "))
+		}
+		b.WriteString("}\n")
 	}
 
 	switch r.Type {
@@ -138,8 +190,19 @@ func renderBody(r Route, domain string) string {
 			b.WriteString("\t# и страница сломается на первом же расхождении (DESIGN.md §2.11)\n")
 			b.WriteString("\theader_down -Content-Security-Policy\n")
 		}
-		if r.ReadTimeout != "" {
-			fmt.Fprintf(&b, "\ttransport http {\n\t\tread_timeout %s\n\t}\n", r.ReadTimeout)
+		if r.Flush {
+			b.WriteString("\t# Без буфера: события и стримы уходят клиенту сразу\n")
+			b.WriteString("\tflush_interval -1\n")
+		}
+		if r.ReadTimeout != "" || r.DialTimeout != "" {
+			b.WriteString("\ttransport http {\n")
+			if r.DialTimeout != "" {
+				fmt.Fprintf(&b, "\t\tdial_timeout %s\n", r.DialTimeout)
+			}
+			if r.ReadTimeout != "" {
+				fmt.Fprintf(&b, "\t\tread_timeout %s\n", r.ReadTimeout)
+			}
+			b.WriteString("\t}\n")
 		}
 		b.WriteString("}\n")
 		if r.CSP != "" {
@@ -165,6 +228,58 @@ func renderBody(r Route, domain string) string {
 	}
 
 	return b.String()
+}
+
+// renderACMEBlock — отдельный блок :80 для сайта, чей сертификат выпускает ещё
+// и чужой certbot (HTTP-01 webroot). Свои проверки Caddy перехватывает раньше
+// маршрутов и только по своим токенам, чужие проваливаются в webroot — друг
+// другу они не мешают. Явный http-блок отключает авторедирект Caddy для этих
+// имён, поэтому всё остальное уходит туда же, куда и https.
+func renderACMEBlock(domain string, addresses []string, head Route) string {
+	var b strings.Builder
+	http := make([]string, len(addresses))
+	for i, a := range addresses {
+		http[i] = "http://" + a
+	}
+	fmt.Fprintf(&b, "\n%s {\n", strings.Join(http, ", "))
+	b.WriteString(HideStack)
+	fmt.Fprintf(&b, "\thandle /.well-known/acme-challenge/* {\n\t\troot * %s\n\t\tfile_server\n\t}\n", head.ACMEWebroot)
+	b.WriteString("\thandle {\n")
+	if head.Type == TypeRedirect {
+		fmt.Fprintf(&b, "\t\tredir %s{uri} permanent\n", strings.TrimRight(head.RedirectTo, "/"))
+	} else {
+		b.WriteString("\t\tredir https://{host}{uri} permanent\n")
+	}
+	b.WriteString("\t}\n")
+	fmt.Fprintf(&b, "\n\tlog {\n\t\toutput file /var/log/caddy/%s.log {\n\t\t\troll_size 10MiB\n\t\t\troll_keep 5\n\t\t}\n\t\tformat json\n\t}\n", domain)
+	b.WriteString("}\n")
+	return b.String()
+}
+
+// headerLine — строка внутри блока header: «Имя "значение"» или «-Имя».
+func headerLine(h Header) string {
+	if h.Value == "-" {
+		return "-" + h.Name
+	}
+	return h.Name + " " + quoteValue(h.Value)
+}
+
+// quoteValue берёт значение в кавычки для Caddyfile. Плейсхолдеры вида {uri}
+// внутри кавычек Caddy подставляет так же.
+func quoteValue(v string) string {
+	return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(v) + `"`
+}
+
+// denyPattern — закрытый путь. «/api/metrics» закрывает ровно его, а не всё,
+// что начинается так же; «/admin/» или «/admin*» — весь раздел.
+func denyPattern(p string) string {
+	if strings.ContainsAny(p, "*") {
+		return p
+	}
+	if strings.HasSuffix(p, "/") {
+		return p + "*"
+	}
+	return p
 }
 
 // pathPattern превращает «/logs/» в «/logs/*», сохраняя уже готовые шаблоны.

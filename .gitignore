@@ -12,3 +12,4 @@
 
 # локальные настройки Claude (пути к scratchpad)
 /.claude/
+/_tmp/

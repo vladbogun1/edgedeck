@@ -84,6 +84,44 @@ type Route struct {
 	DenyPaths []string `yaml:"deny_paths,omitempty" json:"deny_paths,omitempty"`
 
 	Comment string `yaml:"comment,omitempty" json:"comment,omitempty"`
+
+	// ---- то, без чего сайты оставались «руками» (октябрь 2026) ----
+
+	// Headers — свои заголовки ответа в точном виде, например HSTS на 2 года с
+	// includeSubDomains или Referrer-Policy строже, чем в common. Порядок
+	// сохраняется. Значение «-» удаляет заголовок. Относятся к сайту целиком.
+	Headers []Header `yaml:"headers,omitempty" json:"headers,omitempty"`
+
+	// Compress — сжатие ответа (encode zstd gzip) без остального набора common:
+	// Mini App в iframe Telegram ломается от X-Frame-Options, а сжатие нужно.
+	Compress bool `yaml:"compress,omitempty" json:"compress,omitempty"`
+
+	// PathRedirects — точечные редиректы внутри сайта, например /logs → /logs/.
+	PathRedirects []PathRedirect `yaml:"path_redirects,omitempty" json:"path_redirects,omitempty"`
+
+	// ACMEWebroot — на :80 отдавать проверки чужого certbot из этой папки
+	// (в контейнере Caddy). Нужно, когда сертификат на это же имя выпускает
+	// кто-то ещё — например, Caddy магазина для портов 666/667. Остальной http
+	// уходит туда же, куда и https.
+	ACMEWebroot string `yaml:"acme_webroot,omitempty" json:"acme_webroot,omitempty"`
+
+	// Flush — отдавать ответ сразу, без буфера (nginx proxy_buffering off):
+	// события, стримы, камера.
+	Flush bool `yaml:"flush,omitempty" json:"flush,omitempty"`
+
+	// DialTimeout — сколько ждать соединения с целью, например 5s.
+	DialTimeout string `yaml:"dial_timeout,omitempty" json:"dial_timeout,omitempty"`
+}
+
+type Header struct {
+	Name  string `yaml:"name" json:"name"`
+	Value string `yaml:"value" json:"value"`
+}
+
+type PathRedirect struct {
+	From string `yaml:"from" json:"from"`
+	To   string `yaml:"to" json:"to"`
+	Code int    `yaml:"code,omitempty" json:"code,omitempty"` // 301 по умолчанию
 }
 
 type Target struct {
@@ -96,6 +134,11 @@ type Target struct {
 type ForwardAuth struct {
 	Upstream string `yaml:"upstream" json:"upstream"` // контейнер:порт панели-авторизатора
 	URI      string `yaml:"uri" json:"uri"`           // путь проверки, например /api/authcheck
+	// CopyHeaders — какие заголовки ответа авторизатора передать дальше в цель.
+	CopyHeaders []string `yaml:"copy_headers,omitempty" json:"copy_headers,omitempty"`
+	// HeaderUp — что добавить в запрос к авторизатору, например
+	// X-Original-URI: {uri} — как nginx auth_request.
+	HeaderUp []Header `yaml:"header_up,omitempty" json:"header_up,omitempty"`
 }
 
 // ID — устойчивый идентификатор маршрута для интерфейса.
@@ -182,6 +225,30 @@ func Save(edgeDir string, c Config) error {
 
 var domainRe = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$`)
 
+var (
+	headerNameRe = regexp.MustCompile(`^[A-Za-z0-9-]+$`)
+	safePathRe   = regexp.MustCompile(`^/[^\s{}"]*$`)
+)
+
+func hasHeader(list []Header, name string) bool {
+	for _, h := range list {
+		if strings.EqualFold(h.Name, name) && h.Value != "-" {
+			return true
+		}
+	}
+	return false
+}
+
+func checkHeader(h Header) error {
+	if !headerNameRe.MatchString(h.Name) {
+		return fmt.Errorf("«%s» не похоже на имя заголовка", h.Name)
+	}
+	if strings.ContainsAny(h.Value, "\r\n") {
+		return fmt.Errorf("в значении заголовка %s перевод строки", h.Name)
+	}
+	return nil
+}
+
 // Validate проверяет то, что можно проверить без сети, и объясняет по-русски.
 func (r *Route) Validate() error {
 	r.Domain = strings.ToLower(strings.TrimSpace(r.Domain))
@@ -241,6 +308,39 @@ func (r *Route) Validate() error {
 	if r.ReadTimeout != "" && !durationRe.MatchString(r.ReadTimeout) {
 		return fmt.Errorf("таймаут «%s» непонятен, ожидается вид 30s или 1h", r.ReadTimeout)
 	}
+	if r.DialTimeout != "" && !durationRe.MatchString(r.DialTimeout) {
+		return fmt.Errorf("таймаут соединения «%s» непонятен, ожидается вид 5s", r.DialTimeout)
+	}
+	// Значения попадают в Caddyfile: перевод строки или фигурная скобка в них
+	// позволили бы дописать в конфиг свою директиву.
+	for _, h := range r.Headers {
+		if err := checkHeader(h); err != nil {
+			return err
+		}
+	}
+	if r.Auth != nil {
+		for _, h := range r.Auth.HeaderUp {
+			if err := checkHeader(h); err != nil {
+				return err
+			}
+		}
+		for _, n := range r.Auth.CopyHeaders {
+			if !headerNameRe.MatchString(n) {
+				return fmt.Errorf("«%s» не похоже на имя заголовка", n)
+			}
+		}
+	}
+	for _, pr := range r.PathRedirects {
+		if !safePathRe.MatchString(pr.From) || !safePathRe.MatchString(pr.To) {
+			return fmt.Errorf("редирект «%s → %s»: пути должны начинаться со «/» и быть без пробелов", pr.From, pr.To)
+		}
+		if pr.Code != 0 && (pr.Code < 300 || pr.Code > 308) {
+			return fmt.Errorf("код редиректа %d — ожидается 301, 302, 307 или 308", pr.Code)
+		}
+	}
+	if r.ACMEWebroot != "" && !safePathRe.MatchString(r.ACMEWebroot) {
+		return fmt.Errorf("папка проверок «%s» должна быть абсолютным путём без пробелов", r.ACMEWebroot)
+	}
 	for _, ip := range r.AllowIPs {
 		if net.ParseIP(ip) == nil {
 			if _, _, err := net.ParseCIDR(ip); err != nil {
@@ -248,7 +348,7 @@ func (r *Route) Validate() error {
 			}
 		}
 	}
-	if r.HideUpstreamCSP && r.CSP == "" {
+	if r.HideUpstreamCSP && r.CSP == "" && !hasHeader(r.Headers, "Content-Security-Policy") {
 		return fmt.Errorf("снимать CSP апстрима без своей политики опасно: страница останется без CSP вообще")
 	}
 	return nil

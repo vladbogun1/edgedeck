@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api, type Overview } from "../api";
+import { ErrorBoundary } from "../ErrorBoundary";
 import { Meter, cn } from "../ui";
 import { CertsView } from "./CertsView";
 import { ContainersView } from "./ContainersView";
@@ -179,12 +180,14 @@ export function Shell({ onLogout }: { onLogout: () => void }) {
               animate={{ opacity: 1, y: 0, transition: { duration: 0.26, ease: [0.22, 1, 0.36, 1] } }}
               exit={{ opacity: 0, y: -4, transition: { duration: 0.12 } }}
             >
+              <ErrorBoundary resetKey={tab}>
               {tab === "domains" && <Dashboard overview={overview} onChanged={reload} />}
               {tab === "targets" && <ContainersView />}
               {tab === "ports" && <PortsView />}
               {tab === "certs" && <CertsView certs={overview?.certificates ?? null} />}
               {tab === "history" && <HistoryView />}
               {tab === "settings" && <SettingsView />}
+              </ErrorBoundary>
             </motion.div>
           </AnimatePresence>
         </main>
