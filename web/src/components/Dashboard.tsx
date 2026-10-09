@@ -3,9 +3,11 @@ import {
   AlertTriangle,
   ArrowRight,
   CheckCircle2,
+  CornerDownRight,
   FileCode2,
   Globe2,
   Inbox,
+  Layers,
   Pencil,
   Plus,
   ShieldAlert,
@@ -24,7 +26,23 @@ import {
   type RouteView,
   type SeenDomain,
 } from "../api";
-import { CountUp, Empty, PageHeader, Section, SiteIcon, Skeleton, SkeletonRows, cn, plural, rise, stagger } from "../ui";
+import {
+  CountUp,
+  Empty,
+  PageHeader,
+  Section,
+  SiteIcon,
+  Skeleton,
+  SkeletonRows,
+  cn,
+  hueOf,
+  plural,
+  rise,
+  stackBy,
+  stagger,
+  subLabel,
+  type Stack,
+} from "../ui";
 import { Wizard } from "./Wizard";
 
 // Экран «Домены»: что требует внимания, что настроено, что пришло и не настроено.
@@ -182,16 +200,16 @@ export function Dashboard({ overview, onChanged }: { overview: Overview | null; 
             нажмите «Добавить домен» — или примите под управление файл, заведённый раньше руками.
           </Empty>
         ) : (
-          <motion.div variants={stagger} initial="hidden" animate="show" className="card rows overflow-hidden">
-            {routes.map((r) => (
-              <motion.div key={r.id} variants={rise}>
-                <RouteRow
-                  r={r}
-                  site={live.get(r.domain)}
-                  days={certDays.get(r.domain)}
-                  busy={busy === r.id}
-                  onEdit={() => setWizard({ editing: r })}
-                  onDelete={async () => {
+          <motion.div variants={stagger} initial="hidden" animate="show" className="space-y-4">
+            {stackBy(routes, (r) => r.zone, (r) => r.domain).map((st) => (
+              <motion.div key={st.zone} variants={rise}>
+                <RouteStack
+                  stack={st}
+                  live={live}
+                  certDays={certDays}
+                  busy={busy}
+                  onEdit={(r) => setWizard({ editing: r })}
+                  onDelete={async (r) => {
                     if (!confirm(`Удалить маршрут ${r.id}? Файл сайта тоже удалится.`)) return;
                     setBusy(r.id);
                     try {
@@ -416,8 +434,118 @@ function Kpi({
   );
 }
 
+// Стек маршрутов одной зоны: шапка проекта и его домены; пути одного домена
+// (/logs/, /vault/) — вложенными строками под ним.
+function RouteStack({
+  stack,
+  live,
+  certDays,
+  busy,
+  onEdit,
+  onDelete,
+}: {
+  stack: Stack<RouteView>;
+  live: Map<string, PublicSite>;
+  certDays: Map<string, number>;
+  busy: string;
+  onEdit: (r: RouteView) => void;
+  onDelete: (r: RouteView) => void;
+}) {
+  const hue = hueOf(stack.zone);
+  // Домены по порядку стека, у каждого — корень и пути.
+  const byDomain = new Map<string, RouteView[]>();
+  for (const r of stack.members) byDomain.set(r.domain, [...(byDomain.get(r.domain) ?? []), r]);
+  const domains = [...byDomain.entries()].map(([domain, list]) => {
+    const sorted = [...list].sort((a, b) => (a.path === "/" ? -1 : b.path === "/" ? 1 : (a.path ?? "").localeCompare(b.path ?? "")));
+    return { domain, head: sorted[0], paths: sorted.slice(1) };
+  });
+  const sites = domains.map((d) => live.get(d.domain)).filter(Boolean) as PublicSite[];
+  const up = sites.filter((s) => s.online).length;
+  const multi = domains.length > 1;
+
+  return (
+    <div className="card relative overflow-hidden">
+      {multi && (
+        <>
+          <span
+            className="absolute inset-y-0 left-0 w-[3px]"
+            style={{ background: `linear-gradient(to bottom, hsl(${hue} 85% 62%), hsl(${(hue + 50) % 360} 85% 50% / .3))` }}
+          />
+          <div className="flex items-center gap-3 border-b border-line bg-white/[0.015] px-4 py-3 sm:px-5">
+            <span
+              className="grid size-8 place-items-center rounded-lg border border-white/10"
+              style={{ background: `linear-gradient(135deg, hsl(${hue} 80% 55% / .35), hsl(${(hue + 50) % 360} 80% 45% / .15))` }}
+            >
+              <Layers className="size-4 text-white" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="truncate font-display font-semibold">{stack.zone}</div>
+              <div className="text-xs text-faint">
+                стек · {domains.length} {plural(domains.length, "домен", "домена", "доменов")}
+              </div>
+            </div>
+            {sites.length > 0 && (
+              <span className={cn("chip", up === sites.length ? "chip-ok" : "chip-warn")}>
+                <span className={cn("dot !size-1.5", up === sites.length && "dot-live")} />
+                {up === sites.length ? "все работают" : `${up} из ${sites.length}`}
+              </span>
+            )}
+          </div>
+        </>
+      )}
+      <div className={cn("rows", multi && "pl-[3px]")}>
+        {domains.map((d) => (
+          <div key={d.domain}>
+            <RouteRow
+              r={d.head}
+              label={multi ? subLabel(d.domain, stack.zone) : undefined}
+              hue={hue}
+              site={live.get(d.domain)}
+              days={certDays.get(d.domain)}
+              busy={busy === d.head.id}
+              onEdit={() => onEdit(d.head)}
+              onDelete={() => onDelete(d.head)}
+            />
+            {d.paths.map((r) => (
+              <PathRow key={r.id} r={r} busy={busy === r.id} onEdit={() => onEdit(r)} onDelete={() => onDelete(r)} />
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PathRow({ r, busy, onEdit, onDelete }: { r: RouteView; busy: boolean; onEdit: () => void; onDelete: () => void }) {
+  return (
+    <div className="group flex flex-wrap items-center gap-x-3 gap-y-1 py-2 pr-4 pl-[66px] text-sm transition-colors hover:bg-white/[0.02] sm:pr-5 sm:pl-[72px]">
+      <CornerDownRight className="size-3.5 shrink-0 text-faint" />
+      <span className="font-mono text-[13px] text-text">{r.path}</span>
+      <ArrowRight className="size-3 shrink-0 text-faint" />
+      <span className="min-w-0 truncate font-mono text-xs text-muted">{r.target_addr || r.type}</span>
+      {r.auth?.upstream && <span className="chip chip-accent">вход</span>}
+      {r.max_upload && <span className="chip font-mono">{r.max_upload}</span>}
+      <div className="ml-auto flex gap-1.5 opacity-100 transition-opacity lg:opacity-0 lg:group-focus-within:opacity-100 lg:group-hover:opacity-100">
+        <button onClick={onEdit} aria-label={`Изменить ${r.id}`} className="btn btn-ghost btn-sm btn-icon !size-7">
+          <Pencil className="size-3.5" />
+        </button>
+        <button
+          disabled={busy}
+          onClick={onDelete}
+          aria-label={`Удалить ${r.id}`}
+          className="btn btn-ghost btn-sm btn-icon !size-7 hover:!border-bad/40 hover:!text-bad"
+        >
+          <Trash2 className="size-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function RouteRow({
   r,
+  label,
+  hue,
   site,
   days,
   busy,
@@ -425,6 +553,8 @@ function RouteRow({
   onDelete,
 }: {
   r: RouteView;
+  label?: string;
+  hue?: number;
   site?: PublicSite;
   days?: number;
   busy: boolean;
@@ -446,6 +576,14 @@ function RouteRow({
       <SiteIcon domain={r.domain} src={site?.icon} size={36} />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
+          {label && (
+            <span
+              className="shrink-0 rounded-md px-1.5 py-0.5 font-mono text-[11px] font-semibold"
+              style={{ background: `hsl(${hue} 80% 60% / .15)`, color: `hsl(${hue} 90% 80%)` }}
+            >
+              {label}
+            </span>
+          )}
           <a
             href={`https://${r.domain}${r.path === "/" ? "" : r.path}`}
             className="truncate font-medium transition-colors hover:text-accent-hi"

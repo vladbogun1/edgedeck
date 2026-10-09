@@ -1,8 +1,8 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowUpRight, KeyRound, Loader2, Lock, Send, ServerCog, X } from "lucide-react";
+import { ArrowUpRight, CornerDownRight, KeyRound, Layers, Loader2, Lock, Send, ServerCog, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { api, type PublicSite } from "../api";
-import { CountUp, SiteIcon, Skeleton, cn, hueOf, plural, rise, stagger } from "../ui";
+import { CountUp, SiteIcon, Skeleton, cn, hueOf, plural, rise, stackBy, stagger, subLabel, type Stack } from "../ui";
 
 // Главная страница до входа: витрина сайтов этого сервера и вход в управление.
 //
@@ -23,8 +23,11 @@ export function Login({ onSuccess }: { onSuccess: () => void }) {
     })();
   }, []);
 
-  const online = sites?.filter((s) => s.online).length ?? 0;
-  const allUp = sites !== null && sites.length > 0 && online === sites.length;
+  const liveSites = sites?.filter((s) => s.kind !== "редирект") ?? [];
+  const services = liveSites.length;
+  const projects = new Set(liveSites.map((s) => s.zone || s.domain)).size;
+  const online = liveSites.filter((s) => s.online).length;
+  const allUp = sites !== null && services > 0 && online === services;
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-6xl flex-col px-4 sm:px-6">
@@ -46,18 +49,19 @@ export function Login({ onSuccess }: { onSuccess: () => void }) {
                 ? "сайтов пока нет"
                 : allUp
                   ? "все системы в норме"
-                  : `работают ${online} из ${sites.length}`}
+                  : `работают ${online} из ${services}`}
           </div>
           <h1 className="page-title max-w-3xl text-4xl leading-[1.05] sm:text-6xl">
             Сайты <span className="text-gradient">этого сервера</span>
           </h1>
           <p className="mt-4 max-w-xl text-base text-muted">
-            Всё, что здесь живёт, в одном месте: открывайте любой — статус проверяется прямо сейчас, тем же путём, что
-            у посетителя.
+            Всё, что здесь живёт, в одном месте: открывайте любой — статус проверяется прямо сейчас, тем же путём, что у
+            посетителя.
           </p>
           {sites && sites.length > 0 && (
             <div className="mt-8 flex gap-8">
-              <Stat label={plural(sites.length, "сайт", "сайта", "сайтов")} value={sites.length} />
+              <Stat label={plural(projects, "проект", "проекта", "проектов")} value={projects} />
+              <Stat label={plural(services, "сервис", "сервиса", "сервисов")} value={services} />
               <Stat label="в сети" value={online} tone="ok" />
             </div>
           )}
@@ -101,11 +105,39 @@ function Stat({ label, value, tone }: { label: string; value: number; tone?: "ok
   );
 }
 
+// Витрина группирует сервисы по зоне: chisetup.com.ua, app. и admin. — один
+// проект, и показывать их тремя несвязанными карточками незачем. Редиректы
+// отдельных карточек не получают: www уходит в свой стек подписью, старые
+// адреса — в блок «Переадресации» внизу.
+function splitSites(sites: PublicSite[]) {
+  const live = sites.filter((s) => s.kind !== "редирект");
+  const redirects = sites.filter((s) => s.kind === "редирект");
+  const stacks = stackBy(
+    live,
+    (s) => s.zone,
+    (s) => s.domain,
+  );
+  const liveDomains = new Set(live.map((s) => s.domain));
+  // www.<сайт> → сам сайт — это просто второе имя, а не переадресация.
+  const aliasOf = new Map<string, string[]>();
+  const moved: PublicSite[] = [];
+  for (const r of redirects) {
+    const target = (r.redirect_to ?? "").replace(/^https?:\/\//, "");
+    if (liveDomains.has(target) && r.domain === "www." + target) {
+      aliasOf.set(target, [...(aliasOf.get(target) ?? []), "www"]);
+    } else {
+      moved.push(r);
+    }
+  }
+  return { stacks, aliasOf, moved };
+}
+
 function SiteGrid({ sites }: { sites: PublicSite[] | null }) {
   if (sites === null) {
     return (
       <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-        {[0, 1, 2, 3, 4, 5].map((i) => (
+        <Skeleton className="h-[300px] rounded-[18px] sm:col-span-2 lg:col-span-3" />
+        {[0, 1, 2].map((i) => (
           <Skeleton key={i} className="h-[300px] rounded-[18px]" />
         ))}
       </div>
@@ -118,18 +150,211 @@ function SiteGrid({ sites }: { sites: PublicSite[] | null }) {
       </div>
     );
   }
+  const { stacks, aliasOf, moved } = splitSites(sites);
   return (
-    <motion.div variants={stagger} initial="hidden" animate="show" className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-      {sites.map((s) => (
-        <motion.div key={s.domain} variants={rise}>
-          <SiteCard site={s} />
-        </motion.div>
-      ))}
-    </motion.div>
+    <div className="space-y-10">
+      <motion.div
+        variants={stagger}
+        initial="hidden"
+        animate="show"
+        className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3"
+      >
+        {stacks.map((st) =>
+          st.members.length > 1 ? (
+            <motion.div key={st.zone} variants={rise} className="sm:col-span-2 lg:col-span-3">
+              <StackCard stack={st} aliases={aliasOf} />
+            </motion.div>
+          ) : (
+            <motion.div key={st.zone} variants={rise}>
+              <SiteCard site={st.main} aliases={aliasOf.get(st.main.domain) ?? []} />
+            </motion.div>
+          ),
+        )}
+      </motion.div>
+      {moved.length > 0 && <Redirects list={moved} />}
+    </div>
   );
 }
 
-function SiteCard({ site }: { site: PublicSite }) {
+// Стек: превью главного сайта слева, сервисы проекта справа, связанные линией.
+function StackCard({ stack, aliases }: { stack: Stack<PublicSite>; aliases: Map<string, string[]> }) {
+  const main = stack.main;
+  const hue = hueOf(stack.zone);
+  const up = stack.members.filter((m) => m.online).length;
+  const allUp = up === stack.members.length;
+  const [imageOk, setImageOk] = useState(Boolean(main.image));
+  const title = main.title && main.title !== main.domain ? main.title : prettyDomain(main.domain);
+  const mainAliases = aliases.get(main.domain) ?? [];
+
+  return (
+    <div
+      className="relative overflow-hidden rounded-[22px] border border-line bg-panel/80 backdrop-blur"
+      style={{
+        boxShadow: `0 30px 80px -40px hsl(${hue} 90% 50% / .45), var(--shadow-card)`,
+      }}
+    >
+      <span
+        className="absolute inset-x-0 top-0 z-10 h-px"
+        style={{
+          background: `linear-gradient(90deg, transparent, hsl(${hue} 90% 65% / .9), transparent)`,
+        }}
+      />
+      <div className="grid lg:grid-cols-[1.15fr_1fr]">
+        <a
+          href={`https://${main.domain}/`}
+          className="group relative block min-h-[240px] overflow-hidden border-b border-line lg:border-r lg:border-b-0"
+        >
+          {imageOk && main.image ? (
+            <img
+              src={main.image}
+              alt=""
+              loading="lazy"
+              referrerPolicy="no-referrer"
+              onError={() => setImageOk(false)}
+              className="absolute inset-0 size-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
+            />
+          ) : (
+            <GeneratedCover site={main} hue={hue} title={title} />
+          )}
+          {imageOk && main.image && (
+            <>
+              <div className="absolute inset-0 bg-gradient-to-t from-ink/95 via-ink/30 to-transparent" />
+              <div className="absolute inset-x-0 bottom-0 flex items-end gap-3 p-5">
+                <SiteIcon domain={main.domain} src={main.icon} size={46} />
+                <div className="min-w-0">
+                  <div className="truncate font-display text-xl font-bold text-white">{title}</div>
+                  <div className="truncate font-mono text-xs text-white/70">
+                    {main.domain}
+                    {mainAliases.length > 0 && <span className="text-white/45"> · также {mainAliases.join(", ")}</span>}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </a>
+
+        <div className="flex flex-col p-5 sm:p-6">
+          <div className="flex items-center gap-3">
+            <span
+              className="grid size-10 place-items-center rounded-xl border border-white/10"
+              style={{
+                background: `linear-gradient(135deg, hsl(${hue} 80% 55% / .4), hsl(${(hue + 50) % 360} 80% 45% / .2))`,
+              }}
+            >
+              <Layers className="size-5 text-white" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="eyebrow">стек проекта</div>
+              <div className="truncate font-display text-lg font-bold">{stack.zone}</div>
+            </div>
+            <span className={cn("chip", allUp ? "chip-ok" : "chip-warn")}>
+              <span className={cn("dot !size-1.5", allUp && "dot-live")} />
+              {allUp
+                ? `${stack.members.length} ${plural(stack.members.length, "сервис", "сервиса", "сервисов")}`
+                : `${up} из ${stack.members.length}`}
+            </span>
+          </div>
+          {main.description && <p className="mt-3 line-clamp-2 text-sm text-muted">{main.description}</p>}
+
+          <div className="relative mt-5 flex-1">
+            <span
+              className="absolute top-5 bottom-5 left-[24px] w-px"
+              style={{
+                background: `linear-gradient(to bottom, hsl(${hue} 80% 65% / .5), transparent)`,
+              }}
+              aria-hidden
+            />
+            <ul className="space-y-1">
+              {stack.members.map((m) => (
+                <li key={m.domain}>
+                  <a
+                    href={`https://${m.domain}/`}
+                    className="group relative flex items-center gap-3 rounded-xl border border-transparent px-1.5 py-1.5 transition-colors hover:border-line hover:bg-white/[0.03]"
+                  >
+                    <SiteIcon
+                      domain={m.domain}
+                      src={m.icon}
+                      size={36}
+                      className="relative z-10 ring-4 ring-[var(--color-panel)]"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="shrink-0 rounded-md px-1.5 py-0.5 font-mono text-[11px] font-semibold"
+                          style={{
+                            background: `hsl(${hue} 80% 60% / .15)`,
+                            color: `hsl(${hue} 90% 80%)`,
+                          }}
+                        >
+                          {subLabel(m.domain, stack.zone)}
+                        </span>
+                        <span className="truncate text-sm font-medium">
+                          {m.title && m.title !== m.domain ? m.title : m.domain}
+                        </span>
+                      </div>
+                      <div className="truncate font-mono text-[11px] text-faint">
+                        {m.domain}
+                        {m !== main && (aliases.get(m.domain)?.length ?? 0) > 0 && " · также www"}
+                      </div>
+                    </div>
+                    <span
+                      className={cn("dot !size-2 shrink-0", m.online ? "text-ok" : "text-bad")}
+                      title={m.online ? "работает" : "не отвечает"}
+                    />
+                    <ArrowUpRight className="size-4 shrink-0 text-faint transition-all group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-accent-hi" />
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Redirects({ list }: { list: PublicSite[] }) {
+  const groups = stackBy(
+    list,
+    (s) => s.zone,
+    (s) => s.domain,
+  );
+  return (
+    <section>
+      <div className="mb-3 flex items-center gap-3">
+        <h2 className="eyebrow">Переадресации</h2>
+        <span className="h-px flex-1 bg-line" />
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {groups.map((g) => (
+          <div key={g.zone} className="card px-4 py-3.5">
+            <div className="mb-2 flex items-center gap-2">
+              <SiteIcon domain={g.zone} size={20} />
+              <span className="font-mono text-xs text-muted">{g.zone}</span>
+            </div>
+            <ul className="space-y-1.5">
+              {g.members.map((r) => (
+                <li key={r.domain}>
+                  <a href={`https://${r.domain}/`} className="group flex items-center gap-2 text-[13px]">
+                    <span className="truncate font-mono text-muted transition-colors group-hover:text-text">
+                      {r.domain}
+                    </span>
+                    <CornerDownRight className="size-3.5 shrink-0 text-faint" />
+                    <span className="truncate font-mono text-accent-hi">
+                      {(r.redirect_to ?? "").replace(/^https?:\/\//, "") || "…"}
+                    </span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function SiteCard({ site, aliases = [] }: { site: PublicSite; aliases?: string[] }) {
   const [imageOk, setImageOk] = useState(Boolean(site.image));
   const hue = hueOf(site.domain);
   const title = site.title && site.title !== site.domain ? site.title : prettyDomain(site.domain);
@@ -143,7 +368,9 @@ function SiteCard({ site }: { site: PublicSite }) {
       {/* свечение карточки в цвет сайта при наведении */}
       <span
         className="pointer-events-none absolute -inset-px rounded-[18px] opacity-0 transition-opacity duration-300 group-hover:opacity-100"
-        style={{ boxShadow: `0 0 0 1px hsl(${hue} 90% 65% / .35), 0 20px 50px -20px hsl(${hue} 90% 55% / .5)` }}
+        style={{
+          boxShadow: `0 0 0 1px hsl(${hue} 90% 65% / .35), 0 20px 50px -20px hsl(${hue} 90% 55% / .5)`,
+        }}
       />
 
       <div className="relative aspect-[16/9] overflow-hidden border-b border-line">
@@ -178,7 +405,10 @@ function SiteCard({ site }: { site: PublicSite }) {
           <SiteIcon domain={site.domain} src={site.icon} size={38} />
           <div className="min-w-0 flex-1">
             <div className="truncate font-display text-[15.5px] font-semibold">{title}</div>
-            <div className="truncate font-mono text-xs text-muted">{site.domain}</div>
+            <div className="truncate font-mono text-xs text-muted">
+              {site.domain}
+              {aliases.length > 0 && <span className="text-faint"> · также {aliases.join(", ")}</span>}
+            </div>
           </div>
           <span className="grid size-8 shrink-0 place-items-center rounded-full border border-line text-muted transition-all duration-300 group-hover:border-accent/50 group-hover:bg-accent/10 group-hover:text-accent-hi">
             <ArrowUpRight className="size-4 transition-transform duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
@@ -295,10 +525,24 @@ function LoginDialog({ onSuccess, onClose }: { onSuccess: () => void; onClose: (
         aria-label="Вход в управление"
         className="pop hud relative w-full max-w-sm p-6"
         initial={{ opacity: 0, y: 24, scale: 0.96 }}
-        animate={{ opacity: 1, y: 0, scale: 1, transition: { type: "spring", stiffness: 380, damping: 30 } }}
-        exit={{ opacity: 0, y: 12, scale: 0.98, transition: { duration: 0.15 } }}
+        animate={{
+          opacity: 1,
+          y: 0,
+          scale: 1,
+          transition: { type: "spring", stiffness: 380, damping: 30 },
+        }}
+        exit={{
+          opacity: 0,
+          y: 12,
+          scale: 0.98,
+          transition: { duration: 0.15 },
+        }}
       >
-        <button onClick={onClose} aria-label="Закрыть" className="btn btn-ghost btn-icon btn-sm absolute top-4 right-4 !size-8">
+        <button
+          onClick={onClose}
+          aria-label="Закрыть"
+          className="btn btn-ghost btn-icon btn-sm absolute top-4 right-4 !size-8"
+        >
           <X className="size-4" />
         </button>
         <div className="mb-5 grid size-11 place-items-center rounded-xl border border-accent/30 bg-accent/10 text-accent-hi">

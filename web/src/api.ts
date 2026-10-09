@@ -133,6 +133,8 @@ export type PublicSite = {
   description?: string;
   icon?: string;
   image?: string;
+  zone: string;
+  redirect_to?: string;
 };
 
 // ---- маршруты (этап 1) ----
@@ -165,7 +167,7 @@ export type Route = {
   auth?: { upstream: string; uri: string; copy_headers?: string[]; header_up?: { name: string; value: string }[] } | null;
 };
 
-export type RouteView = Route & { id: string; target_addr: string };
+export type RouteView = Route & { id: string; target_addr: string; zone: string };
 
 export type ManualFile = {
   file: string;
@@ -174,6 +176,7 @@ export type ManualFile = {
   can_import: boolean;
   why_not?: string;
   is_default: boolean;
+  zone: string;
 };
 
 export type Change = { kind: "create" | "update" | "delete" | "unchanged"; file: string; before?: string; after?: string };

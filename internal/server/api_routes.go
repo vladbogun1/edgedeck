@@ -32,6 +32,7 @@ type routeView struct {
 	routes.Route
 	ID         string `json:"id"`
 	TargetAddr string `json:"target_addr"`
+	Zone       string `json:"zone"` // купленный домен: интерфейс группирует по нему в стеки
 }
 
 // manualView — файл, написанный руками. Панель его не трогает, но предлагает
@@ -43,6 +44,7 @@ type manualView struct {
 	CanImport bool     `json:"can_import"`
 	WhyNot    string   `json:"why_not,omitempty"`
 	IsDefault bool     `json:"is_default"`
+	Zone      string   `json:"zone"`
 }
 
 func (a *app) handleRoutesList(w http.ResponseWriter, r *http.Request) {
@@ -53,7 +55,7 @@ func (a *app) handleRoutesList(w http.ResponseWriter, r *http.Request) {
 	}
 	resp := routesResponse{FilePath: routes.Path(a.cfg.EdgeDir)}
 	for _, rt := range cfg.Routes {
-		resp.Routes = append(resp.Routes, routeView{Route: rt, ID: rt.ID(), TargetAddr: rt.Target.Addr()})
+		resp.Routes = append(resp.Routes, routeView{Route: rt, ID: rt.ID(), TargetAddr: rt.Target.Addr(), Zone: zoneOf(rt.Domain)})
 	}
 
 	siteList, _ := sites.Load(a.cfg.SitesDir())
@@ -62,6 +64,11 @@ func (a *app) handleRoutesList(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		mv := manualView{File: s.File, Addresses: s.Addresses, Targets: s.Targets, IsDefault: s.IsDefault}
+		for _, d := range sites.Domains([]sites.Site{s}) {
+			if mv.Zone = zoneOf(d); mv.Zone != "" {
+				break
+			}
+		}
 		if s.IsDefault {
 			mv.WhyNot = "служебный файл: обработчик по умолчанию, им управляет установщик"
 		} else if body, err := os.ReadFile(filepath.Join(a.cfg.SitesDir(), s.File)); err == nil {

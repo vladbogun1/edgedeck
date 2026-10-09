@@ -31,6 +31,11 @@ type publicSite struct {
 	Description string `json:"description,omitempty"`
 	Icon        string `json:"icon,omitempty"`  // ссылка на иконку самого сайта
 	Image       string `json:"image,omitempty"` // og:image для превью
+	// Zone — купленный домен (eTLD+1): витрина собирает сервисы одной зоны
+	// (chisetup.com.ua, app., admin.) в один стек.
+	Zone string `json:"zone"`
+	// RedirectTo — куда ведёт редирект. Публично и так: это видно, открыв адрес.
+	RedirectTo string `json:"redirect_to,omitempty"`
 }
 
 type publicCache struct {
@@ -98,7 +103,7 @@ func (a *app) buildPublicSites(ctx context.Context) []publicSite {
 		if domain == "" {
 			continue
 		}
-		ps := publicSite{Domain: domain, Kind: kindLabel(s.Kind)}
+		ps := publicSite{Domain: domain, Kind: kindLabel(s.Kind), Zone: zoneOf(domain), RedirectTo: redirectTarget(s)}
 
 		wg.Add(1)
 		go func(ps publicSite, s sites.Site, i int) {
@@ -199,6 +204,22 @@ func proxyTarget(s sites.Site) (string, int, bool) {
 		return host, port, true
 	}
 	return "", 0, false
+}
+
+// redirectTarget — адрес редиректа без плейсхолдеров: «https://chisetup.com.ua{uri}» → «https://chisetup.com.ua».
+func redirectTarget(s sites.Site) string {
+	if s.Kind != "redirect" {
+		return ""
+	}
+	for _, t := range s.Targets {
+		if rest, ok := strings.CutPrefix(t, "редирект: "); ok {
+			if i := strings.Index(rest, "{"); i >= 0 {
+				rest = rest[:i]
+			}
+			return strings.TrimRight(rest, "/")
+		}
+	}
+	return ""
 }
 
 func kindLabel(kind string) string {

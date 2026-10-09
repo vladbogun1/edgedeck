@@ -84,13 +84,20 @@ func parse(name, body string) Site {
 			s.Addresses = append(s.Addresses, addr)
 		}
 	}
-	for _, m := range proxyRe.FindAllStringSubmatch(body, -1) {
+	// Служебные блоки — страница ошибки и webroot чужого certbot — не делают
+	// сайт «статикой»: без этого редирект maxsolkh.shop показывался как статика.
+	work := stripServiceBlocks(body)
+	for _, m := range proxyRe.FindAllStringSubmatch(work, -1) {
 		s.Targets = append(s.Targets, m[1])
 	}
-	for _, m := range rootRe.FindAllStringSubmatch(body, -1) {
+	for _, m := range rootRe.FindAllStringSubmatch(work, -1) {
 		s.Targets = append(s.Targets, "статика: "+m[1])
 	}
-	for _, m := range redirRe.FindAllStringSubmatch(body, -1) {
+	for _, m := range redirRe.FindAllStringSubmatch(work, -1) {
+		// «redir /logs /logs/» — поправка пути внутри сайта, а не редирект сайта.
+		if strings.HasPrefix(m[1], "/") {
+			continue
+		}
 		s.Targets = append(s.Targets, "редирект: "+m[1])
 	}
 	for _, m := range handleRe.FindAllStringSubmatch(body, -1) {
@@ -98,13 +105,13 @@ func parse(name, body string) Site {
 	}
 
 	switch {
-	case proxyRe.MatchString(body) && rootRe.MatchString(body):
+	case proxyRe.MatchString(work) && rootRe.MatchString(work):
 		s.Kind = "mixed"
-	case proxyRe.MatchString(body):
+	case proxyRe.MatchString(work):
 		s.Kind = "proxy"
-	case rootRe.MatchString(body):
+	case rootRe.MatchString(work):
 		s.Kind = "static"
-	case redirRe.MatchString(body):
+	case redirRe.MatchString(work):
 		s.Kind = "redirect"
 	}
 	s.Addresses = uniq(s.Addresses)
@@ -172,4 +179,25 @@ func uniq(in []string) []string {
 		out = append(out, v)
 	}
 	return out
+}
+
+// stripServiceBlocks вырезает handle_errors и handle для /.well-known/acme-challenge
+// вместе со всем содержимым (по парным скобкам).
+func stripServiceBlocks(body string) string {
+	lines := strings.Split(body, "\n")
+	var out []string
+	depth := 0
+	for _, l := range lines {
+		t := strings.TrimSpace(l)
+		if depth == 0 && (strings.HasPrefix(t, "handle_errors") || strings.HasPrefix(t, "handle /.well-known/acme-challenge")) && strings.HasSuffix(t, "{") {
+			depth = 1
+			continue
+		}
+		if depth > 0 {
+			depth += strings.Count(t, "{") - strings.Count(t, "}")
+			continue
+		}
+		out = append(out, l)
+	}
+	return strings.Join(out, "\n")
 }

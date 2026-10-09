@@ -54,15 +54,19 @@ const data: Record<string, unknown> = {
   },
   "/api/routes": {
     routes: [
-      { id: "maxsolch.com/", domain: "maxsolch.com", aliases: ["www.maxsolch.com"], path: "/", type: "static", target_addr: "", security_headers: true },
-      { id: "tgdesk.tech/", domain: "tgdesk.tech", aliases: ["www.tgdesk.tech"], path: "/", type: "proxy", target: { kind: "container", name: "twcrm-frontend", port: 80 }, target_addr: "twcrm-frontend:80", hsts: true },
+      { id: "maxsolch.com/", zone: "maxsolch.com", domain: "maxsolch.com", aliases: ["www.maxsolch.com"], path: "/", type: "static", target_addr: "", security_headers: true },
+      { id: "tgdesk.tech/", zone: "tgdesk.tech", domain: "tgdesk.tech", aliases: ["www.tgdesk.tech"], path: "/", type: "proxy", target: { kind: "container", name: "twcrm-frontend", port: 80 }, target_addr: "twcrm-frontend:80" },
+      { id: "bogun.site/", zone: "bogun.site", domain: "bogun.site", aliases: ["www.bogun.site"], path: "/", type: "proxy", target: { kind: "container", name: "jarvis", port: 4000 }, target_addr: "jarvis:4000", headers: [{ name: "Referrer-Policy", value: "same-origin" }] },
+      { id: "bogun.site/logs/", zone: "bogun.site", domain: "bogun.site", path: "/logs/", type: "proxy", target: { kind: "container", name: "dozzle", port: 8080 }, target_addr: "dozzle:8080", auth: { upstream: "jarvis:4000", uri: "/api/authcheck" } },
+      { id: "bogun.site/vault/", zone: "bogun.site", domain: "bogun.site", path: "/vault/", type: "proxy", target: { kind: "container", name: "vaultwarden", port: 80 }, target_addr: "vaultwarden:80", max_upload: "128MB" },
+      { id: "bots.bogun.site/", zone: "bogun.site", domain: "bots.bogun.site", path: "/", type: "proxy", target: { kind: "container", name: "apiary-web", port: 80 }, target_addr: "apiary-web:80", flush: true },
+      { id: "chisetup.com.ua/", zone: "chisetup.com.ua", domain: "chisetup.com.ua", path: "/", type: "proxy", target: { kind: "container", name: "tgshop_v2_gateway_site", port: 80 }, target_addr: "tgshop_v2_gateway_site:80", compress: true },
+      { id: "app.chisetup.com.ua/", zone: "chisetup.com.ua", domain: "app.chisetup.com.ua", path: "/", type: "proxy", target: { kind: "container", name: "tgshop_v2_gateway", port: 80 }, target_addr: "tgshop_v2_gateway:80", compress: true },
+      { id: "admin.chisetup.com.ua/", zone: "chisetup.com.ua", domain: "admin.chisetup.com.ua", path: "/", type: "proxy", target: { kind: "container", name: "tgshop_v2_gateway_admin", port: 80 }, target_addr: "tgshop_v2_gateway_admin:80", compress: true },
+      { id: "www.chisetup.com.ua/", zone: "chisetup.com.ua", domain: "www.chisetup.com.ua", path: "/", type: "redirect", redirect_to: "https://chisetup.com.ua", target_addr: "" },
+      { id: "maxsolkh.shop/", zone: "maxsolkh.shop", domain: "maxsolkh.shop", aliases: ["www.maxsolkh.shop"], path: "/", type: "redirect", redirect_to: "https://chisetup.com.ua", target_addr: "", acme_webroot: "/srv/certbot-webroot" },
     ],
-    manual: [
-      { file: "bogun.site.caddy", addresses: ["bogun.site", "www.bogun.site"], targets: ["jarvis:4000", "dozzle:8080", "vaultwarden:80"], can_import: false, why_not: "несколько целей по путям и forward_auth", is_default: false },
-      { file: "bots.bogun.site.caddy", addresses: ["bots.bogun.site"], targets: ["apiary-web:80"], can_import: true, is_default: false },
-      { file: "chisetup.com.ua.caddy", addresses: ["chisetup.com.ua"], targets: ["tgshop_v2_gateway_site:80"], can_import: false, why_not: "свой сниппет и три домена в файле", is_default: false },
-      { file: "_default.caddy", addresses: [":80", "https://"], targets: ["edgedeck:4000"], can_import: false, is_default: true },
-    ],
+    manual: [{ file: "_default.caddy", addresses: [":80", "https://"], targets: ["edgedeck:4000"], can_import: false, is_default: true, zone: "" }],
     file_path: "/edge/routes.yaml",
   },
   "/api/containers": {
@@ -115,6 +119,23 @@ const data: Record<string, unknown> = {
   },
 };
 
+// Сайты, которых нет в снятом public.json: после переноса chisetup разложился
+// на четыре маршрута, плюс старый домен — редирект.
+const extraPublic = [
+  { domain: "app.chisetup.com.ua", kind: "сайт", online: true, title: "ChiSetup Mini App" },
+  { domain: "admin.chisetup.com.ua", kind: "сайт", online: true, title: "ChiSetup Admin" },
+  { domain: "www.chisetup.com.ua", kind: "редирект", online: true, redirect_to: "https://chisetup.com.ua" },
+];
+
+// Старые снимки public.json без zone: досчитываем грубо (com.ua — три метки).
+function withZone(s: { domain: string; zone?: string; kind: string; redirect_to?: string }) {
+  const parts = s.domain.split(".");
+  const n = parts.slice(-2).join(".") === "com.ua" ? 3 : 2;
+  const fixed = { ...s, zone: s.zone || parts.slice(-n).join(".") };
+  if (fixed.domain === "maxsolkh.shop") return { ...fixed, kind: "редирект", redirect_to: "https://chisetup.com.ua" };
+  return fixed;
+}
+
 function mock(): Plugin {
   return {
     name: "edgedeck-mock",
@@ -124,7 +145,8 @@ function mock(): Plugin {
         if (!path.startsWith("/api/")) return next();
         let body: unknown = data[path];
         if (path === "/api/public/sites") {
-          body = process.env.MOCK_PUBLIC ? JSON.parse(readFileSync(process.env.MOCK_PUBLIC, "utf8")) : { sites: [] };
+          const raw = process.env.MOCK_PUBLIC ? JSON.parse(readFileSync(process.env.MOCK_PUBLIC, "utf8")) : { sites: [] };
+          body = { sites: [...raw.sites, ...extraPublic].map(withZone) };
         }
         if (body === undefined) body = { ok: true, challenge: "x", message: "ок" };
         res.setHeader("Content-Type", "application/json");

@@ -227,3 +227,37 @@ export function Segmented<T extends string>({
     </div>
   );
 }
+
+// ---- стеки: сервисы одной зоны (chisetup.com.ua, app., admin.) вместе ----
+
+export type Stack<T> = { zone: string; main: T; members: T[] };
+
+// stackBy собирает элементы по зоне. Главный — сам корень зоны, потом www.,
+// иначе самое короткое имя. Порядок внутри: главный, затем по имени.
+export function stackBy<T>(items: T[], zone: (t: T) => string, domain: (t: T) => string): Stack<T>[] {
+  const map = new Map<string, T[]>();
+  for (const it of items) {
+    const z = zone(it) || domain(it);
+    const list = map.get(z) ?? [];
+    list.push(it);
+    map.set(z, list);
+  }
+  const out: Stack<T>[] = [];
+  for (const [z, list] of map) {
+    const rank = (t: T) => {
+      const d = domain(t);
+      return d === z ? 0 : d === "www." + z ? 1 : 2 + d.length / 1000;
+    };
+    const members = [...list].sort((a, b) => rank(a) - rank(b) || domain(a).localeCompare(domain(b)));
+    out.push({ zone: z, main: members[0], members });
+  }
+  // Большие стеки первыми, внутри — по имени зоны.
+  return out.sort((a, b) => b.members.length - a.members.length || a.zone.localeCompare(b.zone));
+}
+
+// Подпись сервиса внутри стека: «app», «admin.demo», для корня — «основной».
+export function subLabel(domain: string, zone: string) {
+  if (domain === zone) return "основной";
+  if (domain.endsWith("." + zone)) return domain.slice(0, -zone.length - 1);
+  return domain;
+}
