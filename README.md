@@ -125,3 +125,19 @@ EDGEDECK_TELEGRAM_CHAT=<ваш id у @userinfobot>
 контейнеры к сети `edge` и писать в `~/edge`. Она **не** запускает контейнеры,
 **не** правит чужие compose-файлы и **не** трогает фаервол — для фаервола она
 показывает готовую команду и объясняет, какой слой в данном случае работает.
+
+## Скилл для Claude Code
+
+`skills/edgedeck/` — инструкция для Claude Code: как подключать сайты, править
+`routes.yaml`, деплоить и откатывать панель, поднимать новый сервер. Поставить или
+обновить из GitHub:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File skills\sync.ps1
+```
+
+```bash
+bash skills/sync.sh
+```
+
+Скилл ставится в `~/.claude/skills/edgedeck` и обновляется вместе с кодом.
