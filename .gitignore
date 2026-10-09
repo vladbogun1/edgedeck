@@ -9,3 +9,6 @@
 *.log
 .env
 .DS_Store
+
+# локальные настройки Claude (пути к scratchpad)
+/.claude/

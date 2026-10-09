@@ -124,19 +124,36 @@ func (s *Store) Login(password, ip, userAgent string) (*Session, error) {
 	s.mu.Unlock()
 
 	if !verify(hash, password) {
-		s.mu.Lock()
-		w := s.attempts[ip]
-		if w == nil || time.Now().After(w.until) {
-			w = &attemptCounter{until: time.Now().Add(attemptWindowLen)}
-			s.attempts[ip] = w
-		}
-		w.count++
-		s.mu.Unlock()
+		s.Fail(ip)
 		return nil, ErrBadPassword
 	}
 
 	return s.Issue(ip, userAgent)
 }
+
+// Verify проверяет пароль, не выдавая сессии: для смены пароля изнутри панели.
+// Неудачи идут в тот же счётчик, что и у входа.
+func (s *Store) Verify(password, ip string) error {
+	if s.Locked(ip) {
+		return ErrLocked
+	}
+	s.mu.Lock()
+	hash := s.hash
+	s.mu.Unlock()
+	if !verify(hash, password) {
+		s.Fail(ip)
+		return ErrBadPassword
+	}
+	return nil
+}
+
+// FreshWindow — сколько после входа можно сменить пароль, не вводя текущий.
+// Вход сам по себе подтвердил, что это вы (паролем или кодом из Telegram), а
+// без этого забытый пароль было бы не сменить вовсе.
+const FreshWindow = 15 * time.Minute
+
+// Fresh — сессия создана только что.
+func (s *Session) Fresh() bool { return time.Since(s.Created) < FreshWindow }
 
 // Issue выдаёт сессию тому, кто уже доказал, что он свой: паролем или кодом из
 // Telegram. Счётчик неудачных попыток с этого адреса сбрасывается.

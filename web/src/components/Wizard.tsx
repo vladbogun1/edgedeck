@@ -97,17 +97,30 @@ export function Wizard({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 p-4 py-10">
-      <div className="w-full max-w-2xl rounded-2xl border border-line bg-panel p-6">
-        <div className="mb-5 flex items-baseline gap-3">
-          <h2 className="text-lg font-semibold">{editing ? "Маршрут " + editing.id : "Новый домен"}</h2>
-          <span className="text-xs text-muted">шаг {step} из 4</span>
-          <button onClick={onClose} className="ml-auto text-sm text-muted hover:text-text">
-            закрыть
-          </button>
+    <div className="thin-scroll fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 p-4 py-10 backdrop-blur-[6px]">
+      <div className="pop hud w-full max-w-2xl p-6 sm:p-7">
+        <div className="mb-6">
+          <div className="flex items-center gap-3">
+            <h2 className="page-title text-xl">{editing ? "Маршрут " + editing.id : "Новый домен"}</h2>
+            <span className="rounded-full bg-white/6 px-2 py-0.5 font-mono text-[11px] text-muted">шаг {step} / 4</span>
+            <button onClick={onClose} className="btn btn-ghost btn-sm ml-auto">
+              закрыть
+            </button>
+          </div>
+          <div className="mt-4 grid grid-cols-4 gap-1.5">
+            {[1, 2, 3, 4].map((n) => (
+              <span
+                key={n}
+                className={
+                  "h-1 rounded-full transition-colors duration-300 " +
+                  (n <= step ? "bg-[image:var(--accent-grad)] shadow-[var(--glow-accent)]" : "bg-white/8")
+                }
+              />
+            ))}
+          </div>
         </div>
 
-        {error && <div className="mb-4 rounded-lg bg-bad/10 px-3 py-2 text-sm text-bad">{error}</div>}
+        {error && <div role="alert" className="callout mb-4 text-bad [--tone:var(--color-bad)]">{error}</div>}
 
         {step === 1 && (
           <section className="space-y-3">
@@ -117,7 +130,7 @@ export function Wizard({
               value={route.domain}
               onChange={(e) => set({ domain: e.target.value.trim().toLowerCase() })}
               placeholder="example.com"
-              className="w-full rounded-lg border border-line bg-ink px-3 py-2 outline-none focus:border-accent"
+              className="field"
             />
             {domainCheck && (
               <div className={"text-sm " + (domainOK ? "text-ok" : "text-warn")}>{domainCheck}</div>
@@ -126,14 +139,14 @@ export function Wizard({
               <button
                 disabled={busy || route.domain.length < 4}
                 onClick={checkDomain}
-                className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-ink disabled:opacity-40"
+                className="btn btn-primary"
               >
                 {busy ? "проверяю…" : "Проверить A-запись"}
               </button>
               {domainOK === false && (
                 <button
                   onClick={() => setStep(2)}
-                  className="rounded-lg border border-line px-4 py-2 text-sm text-muted hover:text-text"
+                  className="btn btn-ghost"
                   title="можно настроить заранее: сертификат выпустится, когда запись переедет"
                 >
                   всё равно продолжить
@@ -156,11 +169,11 @@ export function Wizard({
               <button
                 disabled={busy}
                 onClick={runProbe}
-                className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-ink disabled:opacity-40"
+                className="btn btn-primary"
               >
                 {busy ? "стучусь…" : "Проверить цель"}
               </button>
-              <button onClick={() => setStep(2)} className="rounded-lg border border-line px-4 py-2 text-sm text-muted">
+              <button onClick={() => setStep(2)} className="btn btn-ghost">
                 назад
               </button>
             </div>
@@ -169,7 +182,7 @@ export function Wizard({
 
         {step === 4 && (
           <section className="space-y-4">
-            {probe && <div className="rounded-lg border border-line bg-ink px-3 py-2 text-sm">{probe}</div>}
+            {probe && <div className="rounded-xl border border-line bg-black/25 px-3 py-2 text-sm">{probe}</div>}
             {!plan && <div className="text-sm text-muted">собираю план…</div>}
             {plan && (
               <>
@@ -181,7 +194,7 @@ export function Wizard({
                   )}
                 </div>
                 {plan.warnings?.map((w, i) => (
-                  <div key={i} className="rounded-lg border border-warn/40 bg-warn/5 px-3 py-2 text-sm text-warn">
+                  <div key={i} className="callout text-warn [--tone:var(--color-warn)]">
                     {w}
                   </div>
                 ))}
@@ -189,7 +202,7 @@ export function Wizard({
                   {plan.changes
                     .filter((c) => c.kind !== "unchanged")
                     .map((c) => (
-                      <details key={c.file} className="rounded-lg border border-line bg-ink">
+                      <details key={c.file} className="overflow-hidden rounded-xl border border-line bg-black/25">
                         <summary className="cursor-pointer px-3 py-2 text-sm">
                           <span
                             className={
@@ -213,13 +226,13 @@ export function Wizard({
                   <button
                     disabled={busy || !plan.valid}
                     onClick={applyNow}
-                    className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-ink disabled:opacity-40"
+                    className="btn btn-primary"
                   >
                     {busy ? "применяю…" : "Применить"}
                   </button>
                   <button
                     onClick={() => setStep(3)}
-                    className="rounded-lg border border-line px-4 py-2 text-sm text-muted"
+                    className="btn btn-ghost"
                   >
                     назад
                   </button>
@@ -278,11 +291,13 @@ function TargetStep({
             key={k.value}
             onClick={() => set({ type: k.value })}
             className={
-              "rounded-lg border px-3 py-2 text-left " +
-              (route.type === k.value ? "border-accent bg-panel-2" : "border-line hover:border-muted")
+              "rounded-xl border px-3 py-2.5 text-left transition-all " +
+              (route.type === k.value
+                ? "border-accent/60 bg-accent/10 shadow-[0_0_0_3px_rgb(91_157_255/0.12)]"
+                : "border-line bg-white/[0.02] hover:border-line-strong")
             }
           >
-            <div className="text-sm">{k.label}</div>
+            <div className="text-sm font-medium">{k.label}</div>
             <div className="text-xs text-muted">{k.hint}</div>
           </button>
         ))}
@@ -292,14 +307,14 @@ function TargetStep({
         <div className="space-y-2">
           <div className="text-sm text-muted">Найдено на сервере:</div>
           {containers === null && <div className="text-sm text-muted">ищу…</div>}
-          <div className="max-h-64 space-y-1 overflow-y-auto">
+          <div className="thin-scroll max-h-64 space-y-1.5 overflow-y-auto pr-1">
             {containers?.map((c) => {
               const chosen = route.target?.kind === "container" && route.target.name === c.name;
               return (
                 <div
                   key={c.name}
                   className={
-                    "rounded-lg border px-3 py-2 " + (chosen ? "border-accent bg-panel-2" : "border-line")
+                    "rounded-xl border px-3 py-2 transition-colors " + (chosen ? "border-accent/60 bg-accent/10" : "border-line bg-white/[0.02] hover:border-line-strong")
                   }
                 >
                   <button
@@ -332,7 +347,7 @@ function TargetStep({
                           setConnecting("");
                         }
                       }}
-                      className="mt-2 rounded-md border border-accent px-2 py-1 text-xs text-accent disabled:opacity-40"
+                      className="btn btn-soft btn-sm mt-2"
                     >
                       подключить к сети edge
                     </button>
@@ -351,7 +366,7 @@ function TargetStep({
                 onChange={(e) =>
                   set({ target: { ...route.target!, port: parseInt(e.target.value || "0", 10) } })
                 }
-                className="w-24 rounded-lg border border-line bg-ink px-2 py-1"
+                className="field !h-8 w-24"
               />
               <button
                 onClick={() => set({ target: { kind: "host", port: route.target?.port ?? 0 } })}
@@ -363,7 +378,7 @@ function TargetStep({
           )}
 
           {route.target?.kind === "host" && (
-            <div className="space-y-2 rounded-lg border border-warn/40 bg-warn/5 p-3 text-sm">
+            <div className="callout space-y-2 [--tone:var(--color-warn)]">
               <div className="text-warn">Процесс на хосте</div>
               <div className="flex items-center gap-2">
                 <span className="text-muted">порт</span>
@@ -371,7 +386,7 @@ function TargetStep({
                   type="number"
                   value={route.target.port || ""}
                   onChange={(e) => set({ target: { kind: "host", port: parseInt(e.target.value || "0", 10) } })}
-                  className="w-24 rounded-lg border border-line bg-ink px-2 py-1"
+                  className="field !h-8 w-24"
                 />
                 <button
                   onClick={() => set({ target: { kind: "container", name: "", port: 0 } })}
@@ -398,7 +413,7 @@ function TargetStep({
             value={route.redirect_to ?? ""}
             onChange={(e) => set({ redirect_to: e.target.value.trim() })}
             placeholder="https://example.com"
-            className="w-full rounded-lg border border-line bg-ink px-3 py-2"
+            className="field"
           />
         </div>
       )}
@@ -414,11 +429,11 @@ function TargetStep({
         <button
           onClick={onNext}
           disabled={route.type === "proxy" && !(route.target?.port ?? 0)}
-          className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-ink disabled:opacity-40"
+          className="btn btn-primary"
         >
           Дальше
         </button>
-        <button onClick={onBack} className="rounded-lg border border-line px-4 py-2 text-sm text-muted">
+        <button onClick={onBack} className="btn btn-ghost">
           назад
         </button>
       </div>
@@ -436,7 +451,7 @@ function Options({ route, set }: { route: Route; set: (p: Partial<Route>) => voi
           type="checkbox"
           checked={route.security_headers ?? false}
           onChange={(e) => set({ security_headers: e.target.checked })}
-          className="mt-1"
+          className="mt-1 accent-[var(--color-accent)]"
         />
         <span>
           Базовые заголовки безопасности <span className="text-muted">(nosniff, referrer, сжатие)</span>
@@ -444,7 +459,7 @@ function Options({ route, set }: { route: Route; set: (p: Partial<Route>) => voi
       </label>
 
       <label className="flex items-start gap-2 text-sm">
-        <input type="checkbox" checked={route.hsts ?? false} onChange={(e) => set({ hsts: e.target.checked })} className="mt-1" />
+        <input type="checkbox" checked={route.hsts ?? false} onChange={(e) => set({ hsts: e.target.checked })} className="mt-1 accent-[var(--color-accent)]" />
         <span>
           HSTS
           <span className="block text-xs text-warn">
@@ -461,7 +476,7 @@ function Options({ route, set }: { route: Route; set: (p: Partial<Route>) => voi
             value={route.max_upload ?? ""}
             onChange={(e) => set({ max_upload: e.target.value.trim() })}
             placeholder="напр. 128MB"
-            className="w-28 rounded-lg border border-line bg-ink px-2 py-1"
+            className="field !h-8 w-28"
           />
         </label>
         <label className="flex items-center gap-2">
@@ -469,7 +484,7 @@ function Options({ route, set }: { route: Route; set: (p: Partial<Route>) => voi
           <input
             value={route.path ?? "/"}
             onChange={(e) => set({ path: e.target.value.trim() || "/" })}
-            className="w-28 rounded-lg border border-line bg-ink px-2 py-1"
+            className="field !h-8 w-28"
           />
         </label>
       </div>
@@ -487,7 +502,7 @@ function Options({ route, set }: { route: Route; set: (p: Partial<Route>) => voi
             })
           }
           placeholder="www.example.com"
-          className="mt-1 w-full rounded-lg border border-line bg-ink px-3 py-2"
+          className="field mt-1"
         />
       </label>
 
@@ -496,7 +511,7 @@ function Options({ route, set }: { route: Route; set: (p: Partial<Route>) => voi
         <input
           value={route.comment ?? ""}
           onChange={(e) => set({ comment: e.target.value })}
-          className="mt-1 w-full rounded-lg border border-line bg-ink px-3 py-2"
+          className="field mt-1"
         />
       </label>
     </div>

@@ -29,11 +29,18 @@ export function App() {
     return () => window.removeEventListener("unhandledrejection", onRejection);
   }, []);
 
-  if (state === "loading") {
-    return <div className="grid h-full place-items-center text-muted">…</div>;
-  }
-  if (state === "guest") {
-    return <Login onSuccess={() => setState("user")} />;
-  }
-  return <Shell onLogout={() => setState("guest")} />;
+  return (
+    <>
+      <div className="ambient" aria-hidden />
+      {state === "loading" ? (
+        <div className="grid min-h-dvh place-items-center">
+          <span className="size-6 animate-spin rounded-full border-2 border-white/10 border-t-accent" />
+        </div>
+      ) : state === "guest" ? (
+        <Login onSuccess={() => setState("user")} />
+      ) : (
+        <Shell onLogout={() => setState("guest")} />
+      )}
+    </>
+  );
 }

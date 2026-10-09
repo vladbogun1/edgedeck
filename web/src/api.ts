@@ -113,6 +113,7 @@ export type Settings = {
   agent: { ok: boolean; message: string };
   sessions: { token: string; created: string; last_seen: string; ip: string; user_agent: string }[] | null;
   watch: { interval: string; down_warn: string; cert_warn_days: number };
+  password_fresh: boolean;
 };
 
 export type Event = {

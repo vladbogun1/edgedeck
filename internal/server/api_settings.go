@@ -36,7 +36,9 @@ type settingsResponse struct {
 		Message string `json:"message"`
 	} `json:"agent"`
 	Sessions []auth.Session `json:"sessions"`
-	Watch    struct {
+	// PasswordFresh — можно сменить пароль без текущего (вход был только что).
+	PasswordFresh bool `json:"password_fresh"`
+	Watch         struct {
 		Interval string `json:"interval"`
 		DownWarn string `json:"down_warn"`
 		CertWarn int    `json:"cert_warn_days"`
@@ -73,6 +75,9 @@ func (a *app) handleSettings(w http.ResponseWriter, r *http.Request) {
 	resp.Caddy.Message = msg
 
 	resp.Sessions = a.auth.Sessions()
+	if sess := a.currentSession(r); sess != nil {
+		resp.PasswordFresh = sess.Fresh()
+	}
 	resp.Watch.Interval = "1 минута"
 	resp.Watch.DownWarn = "5 минут"
 	resp.Watch.CertWarn = certWarnDays

@@ -1,5 +1,20 @@
+import { motion } from "framer-motion";
+import {
+  AlertTriangle,
+  Bell,
+  Container,
+  KeyRound,
+  Loader2,
+  Monitor,
+  Send,
+  Server,
+  ShieldHalf,
+  Waypoints,
+  type LucideIcon,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { api, type Settings } from "../api";
+import { PageHeader, Section, Skeleton, cn, rise, stagger } from "../ui";
 
 // Настройки: состояние подсистем и две вещи, которые можно сделать —
 // сменить пароль и проверить связь с Telegram.
@@ -9,115 +24,168 @@ import { api, type Settings } from "../api";
 // удобным местом, откуда всё это утекает.
 export function SettingsView() {
   const [s, setS] = useState<Settings | null>(null);
-  const [note, setNote] = useState("");
+  const [note, setNote] = useState<{ text: string; ok: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     void (async () => setS(await api.settings()))();
   }, []);
 
-  if (!s) return <div className="text-muted">загружаю…</div>;
+  if (!s) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Настройки" subtitle="загружаю…" />
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {[0, 1, 2, 3, 4, 5].map((i) => (
+            <Skeleton key={i} className="h-28" />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6">
-      {note && <div className="rounded-xl border border-line bg-panel px-4 py-3 text-sm">{note}</div>}
+    <div className="space-y-9">
+      <PageHeader
+        title="Настройки"
+        subtitle={
+          <>
+            <span className="font-mono text-text">{s.server.hostname}</span> · {s.server.public_ip} ·{" "}
+            <span className="font-mono">{s.server.version}</span>
+          </>
+        }
+      />
 
-      <section className="space-y-2">
-        <h2 className="text-sm font-medium tracking-wide text-muted uppercase">Состояние</h2>
-        <div className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-panel text-sm">
-          <Row label="Сервер" ok value={`${s.server.hostname} · ${s.server.public_ip}`} note={s.server.edge_dir} />
-          <Row label="Версия панели" ok value={s.server.version} />
-          <Row label="Caddy" ok={s.caddy.alive} value={s.caddy.alive ? "admin API отвечает" : "не отвечает"} note={s.caddy.message} />
-          <Row label="Доступ к Docker" ok={s.agent.ok} value={s.agent.ok ? "агент отвечает" : "агент недоступен"} note={s.agent.message} />
-          <Row
-            label="Правила фаервола"
-            ok={s.firewall.ok}
-            value={s.firewall.ok ? "читаются" : "не читаются"}
-            note={s.firewall.status}
-          />
-          <Row
+      {note && (
+        <div className={cn("callout", note.ok ? "[--tone:var(--color-ok)]" : "text-bad [--tone:var(--color-bad)]")}>{note.text}</div>
+      )}
+
+      <Section title="Состояние">
+        <motion.div variants={stagger} initial="hidden" animate="show" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <Status icon={Server} label="Сервер" ok value={s.server.hostname} note={s.server.edge_dir} />
+          <Status icon={Waypoints} label="Caddy" ok={s.caddy.alive} value={s.caddy.alive ? "admin API отвечает" : "не отвечает"} note={s.caddy.message} />
+          <Status icon={Container} label="Доступ к Docker" ok={s.agent.ok} value={s.agent.ok ? "агент отвечает" : "агент недоступен"} note={s.agent.message} />
+          <Status icon={ShieldHalf} label="Правила фаервола" ok={s.firewall.ok} value={s.firewall.ok ? "читаются" : "не читаются"} note={s.firewall.status} />
+          <Status
+            icon={Bell}
             label="Уведомления"
             ok={s.telegram.configured}
             value={s.telegram.configured ? "Telegram настроен" : "не настроены"}
             note={
               s.telegram.configured
-                ? `сторож проверяет сайты раз в ${s.watch.interval}; сообщает, если молчат дольше ${s.watch.down_warn} или сертификату осталось меньше ${s.watch.cert_warn_days} дн.`
-                : "задайте EDGEDECK_TELEGRAM_TOKEN и EDGEDECK_TELEGRAM_CHAT в ~/edgedeck/.env и перезапустите панель"
+                ? `проверка раз в ${s.watch.interval}; тревога, если сайт молчит дольше ${s.watch.down_warn} или сертификату < ${s.watch.cert_warn_days} дн.`
+                : "задайте EDGEDECK_TELEGRAM_TOKEN и EDGEDECK_TELEGRAM_CHAT в ~/edgedeck/.env"
+            }
+            action={
+              s.telegram.configured && (
+                <button
+                  disabled={busy}
+                  onClick={async () => {
+                    setBusy(true);
+                    try {
+                      setNote({ text: (await api.testTelegram()).message, ok: true });
+                    } catch (e) {
+                      setNote({ text: e instanceof Error ? e.message : "не вышло", ok: false });
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                  className="btn btn-ghost btn-sm mt-3"
+                >
+                  {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
+                  Проверить связь
+                </button>
+              )
             }
           />
-        </div>
-        {s.telegram.configured && (
-          <button
-            disabled={busy}
-            onClick={async () => {
-              setBusy(true);
-              try {
-                setNote((await api.testTelegram()).message);
-              } catch (e) {
-                setNote(e instanceof Error ? e.message : "не вышло");
-              } finally {
-                setBusy(false);
-              }
-            }}
-            className="rounded-lg border border-accent px-3 py-1.5 text-sm text-accent disabled:opacity-40"
-          >
-            Проверить связь с Telegram
-          </button>
-        )}
+        </motion.div>
         {!s.firewall.ufw_works && s.firewall.ok && (
-          <div className="rounded-xl border border-warn/40 bg-warn/5 px-4 py-3 text-sm">
-            <div className="text-warn">На этом сервере правила ufw не работают</div>
-            <div className="mt-1 text-muted">
-              В цепочке INPUT безусловный REJECT стоит выше перехода в ufw, поэтому любое <code>ufw allow</code>, кроме
-              уже разрешённого выше, ничего не меняет. Сайты живы потому, что 80 и 443 — docker-порты и идут мимо INPUT.
-              Практический вывод: всё поднимаем в докере, а хостовому сервису нужна ручная правка порядка правил.
+          <div className="callout mt-3 flex gap-3 [--tone:var(--color-warn)]">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warn" />
+            <div>
+              <div className="text-warn">На этом сервере правила ufw не работают</div>
+              <div className="mt-1 text-muted">
+                В цепочке INPUT безусловный REJECT стоит выше перехода в ufw, поэтому любое <code>ufw allow</code>, кроме
+                уже разрешённого выше, ничего не меняет. Сайты живы потому, что 80 и 443 — docker-порты и идут мимо INPUT.
+              </div>
             </div>
           </div>
         )}
-      </section>
+      </Section>
 
-      <PasswordSection onNote={setNote} />
+      <PasswordSection fresh={s.password_fresh} onNote={setNote} />
 
       {s.sessions && s.sessions.length > 0 && (
-        <section>
-          <h2 className="mb-2 text-sm font-medium tracking-wide text-muted uppercase">Активные сессии</h2>
-          <div className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-panel text-sm">
+        <Section title="Активные сессии" count={s.sessions.length}>
+          <div className="card rows overflow-hidden">
             {s.sessions.map((x) => (
-              <div key={x.token} className="flex flex-wrap items-baseline gap-x-3 px-4 py-2">
-                <span className="font-mono text-xs">{x.token}</span>
-                <span className="text-xs text-muted">{x.ip}</span>
-                <span className="ml-auto text-xs text-muted">
-                  вход {new Date(x.created).toLocaleString("ru-RU")}
+              <div key={x.token} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 sm:px-5">
+                <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-white/5 text-muted">
+                  <Monitor className="size-4" />
                 </span>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm">{browserName(x.user_agent)}</div>
+                  <div className="truncate font-mono text-[11px] text-faint">
+                    {x.ip} · {x.token}
+                  </div>
+                </div>
+                <span className="text-xs text-muted">вход {new Date(x.created).toLocaleString("ru-RU")}</span>
               </div>
             ))}
           </div>
-        </section>
+        </Section>
       )}
     </div>
   );
 }
 
-function Row({ label, ok, value, note }: { label: string; ok: boolean; value: string; note?: string }) {
+function Status({
+  icon: Icon,
+  label,
+  ok,
+  value,
+  note,
+  action,
+}: {
+  icon: LucideIcon;
+  label: string;
+  ok: boolean;
+  value: string;
+  note?: string;
+  action?: React.ReactNode;
+}) {
   return (
-    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-4 py-3">
-      <span className="w-40 text-muted">{label}</span>
-      <span className={ok ? "text-text" : "text-warn"}>{value}</span>
-      {note && <span className="ml-auto max-w-lg text-right text-xs text-muted">{note}</span>}
-    </div>
+    <motion.div variants={rise} className="card flex flex-col p-4">
+      <div className="flex items-center gap-3">
+        <span className={cn("grid size-9 shrink-0 place-items-center rounded-lg", ok ? "bg-accent/12 text-accent-hi" : "bg-warn/10 text-warn")}>
+          <Icon className="size-4.5" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="text-xs text-muted">{label}</div>
+          <div className="flex items-center gap-2 truncate text-sm font-medium">
+            <span className={cn("dot !size-1.5", ok ? "text-ok" : "text-warn")} />
+            <span className="truncate">{value}</span>
+          </div>
+        </div>
+      </div>
+      {note && <p className="mt-3 line-clamp-3 text-xs leading-relaxed text-faint">{note}</p>}
+      {action && <div className="mt-auto">{action}</div>}
+    </motion.div>
   );
 }
 
-function PasswordSection({ onNote }: { onNote: (s: string) => void }) {
+function PasswordSection({ fresh, onNote }: { fresh: boolean; onNote: (n: { text: string; ok: boolean }) => void }) {
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [busy, setBusy] = useState(false);
 
   return (
-    <section className="space-y-2">
-      <h2 className="text-sm font-medium tracking-wide text-muted uppercase">Пароль</h2>
+    <Section
+      title="Пароль"
+      hint="Пароль — запасной вход на случай, если Telegram недоступен. Строку EDGEDECK_INITIAL_PASSWORD в ~/edgedeck/.env после смены можно убрать: она нужна только для первого запуска."
+    >
       <form
-        className="flex flex-wrap items-end gap-2 rounded-xl border border-line bg-panel p-4"
+        className="card flex flex-wrap items-end gap-3 p-4 sm:p-5"
         onSubmit={async (e) => {
           e.preventDefault();
           setBusy(true);
@@ -125,44 +193,44 @@ function PasswordSection({ onNote }: { onNote: (s: string) => void }) {
             await api.changePassword(current, next);
             setCurrent("");
             setNext("");
-            onNote("пароль изменён — старые сессии продолжают работать, при желании выйдите везде");
+            onNote({ text: "Пароль изменён. Остальные сессии продолжают работать.", ok: true });
           } catch (err) {
-            onNote(err instanceof Error ? err.message : "не вышло");
+            onNote({ text: err instanceof Error ? err.message : "не вышло", ok: false });
           } finally {
             setBusy(false);
           }
         }}
       >
-        <label className="text-sm">
-          <span className="mb-1 block text-muted">текущий</span>
-          <input
-            type="password"
-            value={current}
-            onChange={(e) => setCurrent(e.target.value)}
-            className="w-44 rounded-lg border border-line bg-ink px-3 py-2"
-          />
+        <span className="grid size-9 shrink-0 place-items-center self-center rounded-lg bg-accent/12 text-accent-hi">
+          <KeyRound className="size-4.5" />
+        </span>
+        {!fresh && (
+          <label className="min-w-44 flex-1">
+            <span className="field-label">Текущий</span>
+            <input type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} className="field" />
+          </label>
+        )}
+        <label className="min-w-44 flex-1">
+          <span className="field-label">Новый, от 8 символов</span>
+          <input type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} className="field" />
         </label>
-        <label className="text-sm">
-          <span className="mb-1 block text-muted">новый (от 8 символов)</span>
-          <input
-            type="password"
-            value={next}
-            onChange={(e) => setNext(e.target.value)}
-            className="w-44 rounded-lg border border-line bg-ink px-3 py-2"
-          />
-        </label>
-        <button
-          type="submit"
-          disabled={busy || current.length === 0 || next.length < 8}
-          className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-ink disabled:opacity-40"
-        >
-          Сменить
+        <button type="submit" disabled={busy || (!fresh && current.length === 0) || next.length < 8} className="btn btn-primary h-10">
+          {busy && <Loader2 className="size-4 animate-spin" />}
+          {fresh ? "Задать пароль" : "Сменить"}
         </button>
+        {fresh && (
+          <p className="w-full text-xs text-muted">
+            Вы только что вошли — текущий пароль не нужен. Можно задать новый, даже если старый забыт.
+          </p>
+        )}
       </form>
-      <p className="text-xs text-muted">
-        Стартовый пароль лежит в <code>~/edgedeck/.env</code>. После смены строку{" "}
-        <code>EDGEDECK_INITIAL_PASSWORD</code> оттуда можно убрать — она нужна только для первого запуска.
-      </p>
-    </section>
+    </Section>
   );
+}
+
+function browserName(ua: string) {
+  if (!ua) return "неизвестный браузер";
+  const os = /Windows/.test(ua) ? "Windows" : /Android/.test(ua) ? "Android" : /iPhone|iPad/.test(ua) ? "iOS" : /Mac OS/.test(ua) ? "macOS" : /Linux/.test(ua) ? "Linux" : "";
+  const br = /Edg\//.test(ua) ? "Edge" : /OPR\//.test(ua) ? "Opera" : /Chrome\//.test(ua) ? "Chrome" : /Firefox\//.test(ua) ? "Firefox" : /Safari\//.test(ua) ? "Safari" : "браузер";
+  return os ? `${br} · ${os}` : br;
 }

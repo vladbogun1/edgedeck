@@ -239,6 +239,19 @@ func (a *app) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// currentSession — сессия запроса или nil.
+func (a *app) currentSession(r *http.Request) *auth.Session {
+	c, err := r.Cookie(sessionCookie)
+	if err != nil {
+		return nil
+	}
+	sess, ok := a.auth.Check(c.Value)
+	if !ok {
+		return nil
+	}
+	return sess
+}
+
 func clientIP(r *http.Request) string {
 	// Панель всегда за Caddy, поэтому доверяем X-Forwarded-For: наружу порт не
 	// опубликован, напрямую до панели дойти нельзя (DESIGN.md §10).

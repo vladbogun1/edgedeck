@@ -80,9 +80,17 @@ func (a *app) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ip := clientIP(r)
-	if _, err := a.auth.Login(req.Current, ip, r.UserAgent()); err != nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "текущий пароль не подошёл"})
-		return
+	// В первые минуты после входа текущий пароль не спрашиваем: вход только что
+	// подтвердил личность, а пароль мог быть забыт — ради этого и есть вход кодом.
+	if sess := a.currentSession(r); sess == nil || !sess.Fresh() || req.Current != "" {
+		if err := a.auth.Verify(req.Current, ip); err != nil {
+			msg := "текущий пароль не подошёл"
+			if err == auth.ErrLocked {
+				msg = "слишком много попыток — подождите 15 минут"
+			}
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": msg})
+			return
+		}
 	}
 	if err := a.auth.SetPassword(req.New); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
