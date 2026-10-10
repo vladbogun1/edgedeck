@@ -58,23 +58,24 @@ func (c *publicCache) invalidate() {
 }
 
 func (a *app) handlePublicSites(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"sites": a.publicSites(r.Context())})
+}
+
+// publicSites — витрина с минутным кешем: проверка сайтов идёт через Caddy и
+// стоит секунд, а спрашивают её и витрина, и «Домены», и флот.
+func (a *app) publicSites(ctx context.Context) []publicSite {
 	a.public.mu.Lock()
 	fresh := time.Since(a.public.fetched) < a.public.ttl && a.public.sites != nil
 	cached := a.public.sites
 	a.public.mu.Unlock()
-
 	if fresh {
-		writeJSON(w, http.StatusOK, map[string]any{"sites": cached})
-		return
+		return cached
 	}
-
-	list := a.buildPublicSites(r.Context())
-
+	list := a.buildPublicSites(ctx)
 	a.public.mu.Lock()
 	a.public.sites, a.public.fetched = list, time.Now()
 	a.public.mu.Unlock()
-
-	writeJSON(w, http.StatusOK, map[string]any{"sites": list})
+	return list
 }
 
 func (a *app) buildPublicSites(ctx context.Context) []publicSite {

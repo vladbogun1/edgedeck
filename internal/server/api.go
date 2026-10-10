@@ -266,6 +266,11 @@ type warning struct {
 }
 
 func (a *app) handleOverview(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, a.buildOverview(r))
+}
+
+// buildOverview — сводка сервера: её показывают «Домены» и отдаёт флоту fleet.go.
+func (a *app) buildOverview(r *http.Request) overview {
 	siteList, err := sites.Load(a.cfg.SitesDir())
 	if err != nil {
 		slog.Warn("не прочитал каталог сайтов", "dir", a.cfg.SitesDir(), "err", err)
@@ -340,7 +345,7 @@ func (a *app) handleOverview(w http.ResponseWriter, r *http.Request) {
 		return ov.Warnings[i].Level == "red" && ov.Warnings[j].Level != "red"
 	})
 
-	writeJSON(w, http.StatusOK, ov)
+	return ov
 }
 
 // containerByPort — какой контейнер держит опубликованный порт. Без этого в

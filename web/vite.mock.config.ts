@@ -137,6 +137,27 @@ function withZone(s: { domain: string; zone?: string; kind: string; redirect_to?
   return fixed;
 }
 
+const fleetMembers = [
+  { id: "s1", label: "прод", url: "https://s1.bogun.site", self: true },
+  { id: "s2", label: "vpn и игры", url: "http://s2.bogun.site", self: false },
+  { id: "s3", label: "новое", url: "https://s3.bogun.site", self: false },
+];
+
+const s3sites = [
+  { domain: "demo.chisetup.com.ua", zone: "chisetup.com.ua", kind: "сайт", online: true, title: "ChiSetup demo" },
+  { domain: "app.demo.chisetup.com.ua", zone: "chisetup.com.ua", kind: "сайт", online: true },
+  { domain: "admin.demo.chisetup.com.ua", zone: "chisetup.com.ua", kind: "сайт", online: true },
+  { domain: "engine.bogun.site", zone: "bogun.site", kind: "сайт", online: true },
+  { domain: "admin.engine.bogun.site", zone: "bogun.site", kind: "сайт", online: true },
+  { domain: "mr.bogun.site", zone: "bogun.site", kind: "сайт", online: true },
+  { domain: "ai.bogun.site", zone: "bogun.site", kind: "сайт", online: true },
+  { domain: "kick.maxsolkh.shop", zone: "maxsolkh.shop", kind: "сайт", online: true },
+];
+
+function fleetSummary(id: string, label: string, server: unknown, sites: unknown[], warnings: unknown[], certificates: unknown[]) {
+  return { id, label, server, caddy: { alive: true, message: "" }, sites, warnings, certificates, seen_unconfigured: 0, foreign_zones: 0, drift: false, time: new Date().toISOString() };
+}
+
 function mock(): Plugin {
   return {
     name: "edgedeck-mock",
@@ -148,6 +169,20 @@ function mock(): Plugin {
         if (path === "/api/public/sites") {
           const raw = process.env.MOCK_PUBLIC ? JSON.parse(readFileSync(process.env.MOCK_PUBLIC, "utf8")) : { sites: [] };
           body = { sites: [...raw.sites, ...extraPublic].map(withZone) };
+        }
+        if (path === "/api/fleet/members") body = { enabled: true, self: "s1", members: fleetMembers };
+        if (path === "/api/fleet") {
+          const raw = process.env.MOCK_PUBLIC ? JSON.parse(readFileSync(process.env.MOCK_PUBLIC, "utf8")) : { sites: [] };
+          const s1sites = [...raw.sites, ...extraPublic].map(withZone);
+          body = {
+            enabled: true,
+            self: "s1",
+            servers: [
+              { member: fleetMembers[0], ok: true, summary: fleetSummary("s1", "прод", (data["/api/overview"] as any).server, s1sites, [{ level: "red", title: "сертификат chisetup.com.ua истекает через 5 дн." }], [{ domains: ["chisetup.com.ua"], days_left: 5 }, { domains: ["tgdesk.tech"], days_left: 19 }]) },
+              { member: fleetMembers[1], ok: true, summary: fleetSummary("s2", "vpn и игры", { hostname: "instance-4x24", public_ip: "150.136.127.73", version: "sha-abb313b", load_avg: 0.31, mem_total_mb: 12000, mem_used_mb: 5800, disk_total_gb: 96, disk_used_gb: 38, cpu_count: 2 }, [], [{ level: "yellow", title: "PufferPanel :8080 открыт по http" }], []) },
+              { member: fleetMembers[2], ok: true, summary: fleetSummary("s3", "новое", { hostname: "oracle-3", public_ip: "150.136.40.217", version: "sha-abb313b", load_avg: 1.6, mem_total_mb: 12000, mem_used_mb: 8500, disk_total_gb: 96, disk_used_gb: 52, cpu_count: 2 }, s3sites, [{ level: "yellow", title: "коллизия имени admin в сети edge" }], [{ domains: ["demo.chisetup.com.ua"], days_left: 74 }, { domains: ["mr.bogun.site"], days_left: 41 }]) },
+            ],
+          };
         }
         if (body === undefined) body = { ok: true, challenge: "x", message: "ок" };
         res.setHeader("Content-Type", "application/json");

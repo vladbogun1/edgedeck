@@ -73,6 +73,12 @@ services:
       # Уведомления: без них панель молчит, а молчание — плохой признак состояния.
       EDGEDECK_TELEGRAM_TOKEN: ${EDGEDECK_TELEGRAM_TOKEN:-}
       EDGEDECK_TELEGRAM_CHAT: ${EDGEDECK_TELEGRAM_CHAT:-}
+      # Флот (PLAN.md Q-1): общий секрет, реестр серверов «id|подпись|адрес панели|адрес для браузера», кто я.
+      EDGEDECK_FLEET: ${EDGEDECK_FLEET:-}
+      EDGEDECK_FLEET_SECRET: ${EDGEDECK_FLEET_SECRET:-}
+      EDGEDECK_SERVER_ID: ${EDGEDECK_SERVER_ID:-}
+      # Свои зоны без маршрутов на этом сервере (например bogun.site на s2 для s2.bogun.site).
+      EDGEDECK_TRUSTED_ZONES: ${EDGEDECK_TRUSTED_ZONES:-}
     volumes:
       # Каталог Caddy: на этапе 0 только читаем, дальше будем писать routes.yaml.
       - ${EDGE_DIR:-/home/ubuntu/edge}:/edge

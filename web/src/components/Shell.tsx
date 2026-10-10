@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Boxes,
+  LayoutGrid,
   Globe2,
   History,
   LogOut,
@@ -11,17 +12,20 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { api, type Overview } from "../api";
+import { api, type FleetMember, type Overview } from "../api";
 import { ErrorBoundary } from "../ErrorBoundary";
 import { Meter, cn } from "../ui";
 import { CertsView } from "./CertsView";
 import { ContainersView } from "./ContainersView";
 import { Dashboard } from "./Dashboard";
+import { FleetView } from "./FleetView";
 import { HistoryView } from "./HistoryView";
 import { PortsView } from "./PortsView";
 import { SettingsView } from "./SettingsView";
 
-type Tab = "domains" | "targets" | "ports" | "certs" | "history" | "settings";
+type Tab = "fleet" | "domains" | "targets" | "ports" | "certs" | "history" | "settings";
+
+const FLEET_NAV = { id: "fleet" as Tab, label: "Флот", icon: LayoutGrid };
 
 const NAV: { id: Tab; label: string; icon: LucideIcon }[] = [
   { id: "domains", label: "Домены", icon: Globe2 },
@@ -36,13 +40,14 @@ const NAV: { id: Tab; label: string; icon: LucideIcon }[] = [
 // заново и «назад» в браузере работал.
 function tabFromHash(): Tab {
   const h = window.location.hash.replace("#", "") as Tab;
-  return NAV.some((n) => n.id === h) ? h : "domains";
+  return h === "fleet" || NAV.some((n) => n.id === h) ? h : "domains";
 }
 
 export function Shell({ onLogout }: { onLogout: () => void }) {
   const [tab, setTabState] = useState<Tab>(tabFromHash);
   const [overview, setOverview] = useState<Overview | null>(null);
   const [error, setError] = useState("");
+  const [fleet, setFleet] = useState<FleetMember[]>([]);
 
   function setTab(t: Tab) {
     if (t !== tab) window.location.hash = t;
@@ -61,6 +66,10 @@ export function Shell({ onLogout }: { onLogout: () => void }) {
   useEffect(() => {
     void reload();
     const t = setInterval(() => void reload(), 15000);
+    api
+      .fleetMembers()
+      .then((f) => setFleet(f.enabled ? f.members : []))
+      .catch(() => {});
     const onHash = () => setTabState(tabFromHash());
     window.addEventListener("hashchange", onHash);
     return () => {
@@ -84,7 +93,8 @@ export function Shell({ onLogout }: { onLogout: () => void }) {
     if (expiring > 0) badges.certs = { n: expiring, strong: true };
   }
 
-  const current = NAV.find((n) => n.id === tab)!;
+  const nav = fleet.length > 0 ? [FLEET_NAV, ...NAV] : NAV;
+  const current = nav.find((n) => n.id === tab) ?? NAV[0];
 
   return (
     <div className="flex min-h-dvh">
@@ -100,9 +110,11 @@ export function Shell({ onLogout }: { onLogout: () => void }) {
           </div>
         </div>
 
+        {fleet.length > 0 && <ServerSwitcher members={fleet} />}
+
         <div className="eyebrow mb-2 px-3">Сервер</div>
         <nav className="space-y-0.5">
-          {NAV.map((n) => (
+          {nav.map((n) => (
             <NavItem key={n.id} item={n} active={tab === n.id} badge={badges[n.id]} onClick={() => setTab(n.id)} />
           ))}
         </nav>
@@ -139,7 +151,7 @@ export function Shell({ onLogout }: { onLogout: () => void }) {
             </button>
           </div>
           <nav className="thin-scroll flex gap-1 overflow-x-auto px-3 pb-2">
-            {NAV.map((n) => {
+            {nav.map((n) => {
               const active = tab === n.id;
               const b = badges[n.id];
               return (
@@ -181,6 +193,7 @@ export function Shell({ onLogout }: { onLogout: () => void }) {
               exit={{ opacity: 0, y: -4, transition: { duration: 0.12 } }}
             >
               <ErrorBoundary resetKey={tab}>
+              {tab === "fleet" && <FleetView />}
               {tab === "domains" && <Dashboard overview={overview} onChanged={reload} />}
               {tab === "targets" && <ContainersView />}
               {tab === "ports" && <PortsView />}
@@ -191,6 +204,37 @@ export function Shell({ onLogout }: { onLogout: () => void }) {
             </motion.div>
           </AnimatePresence>
         </main>
+      </div>
+    </div>
+  );
+}
+
+// Переключатель серверов: своя панель подсвечена, соседняя открывается по её адресу.
+function ServerSwitcher({ members }: { members: FleetMember[] }) {
+  return (
+    <div className="mb-6 px-1">
+      <div className="eyebrow mb-2 px-2">Серверы</div>
+      <div className="grid grid-cols-3 gap-1 rounded-xl border border-line bg-black/25 p-1">
+        {members.map((m) =>
+          m.self ? (
+            <span
+              key={m.id}
+              title={m.label}
+              className="rounded-lg border border-accent/35 bg-accent/12 py-1.5 text-center font-mono text-[12px] font-semibold text-accent-hi"
+            >
+              {m.id}
+            </span>
+          ) : (
+            <a
+              key={m.id}
+              href={m.url}
+              title={`${m.label} — открыть панель`}
+              className="rounded-lg py-1.5 text-center font-mono text-[12px] text-muted transition-colors hover:bg-white/5 hover:text-text"
+            >
+              {m.id}
+            </a>
+          ),
+        )}
       </div>
     </div>
   );

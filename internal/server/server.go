@@ -52,6 +52,7 @@ type app struct {
 	firewall *firewall.Reader
 	notify   *notify.Notifier
 	watch    *watchState
+	fleet    fleetConfig
 }
 
 func Run(ctx context.Context, cfg config.Config) error {
@@ -94,6 +95,7 @@ func Run(ctx context.Context, cfg config.Config) error {
 		firewall: firewall.New(cfg.FirewallFile),
 		notify:   notify.New(notify.LoadConfig()),
 		watch:    newWatchState(),
+		fleet:    loadFleet(),
 	}
 	a.applier = &apply.Applier{
 		EdgeDir:     cfg.EdgeDir,
@@ -175,6 +177,11 @@ func (a *app) routes(mux *http.ServeMux) {
 
 	// Витрина сайтов — до всякого входа (DESIGN.md §9.1).
 	mux.HandleFunc("GET /api/public/sites", a.handlePublicSites)
+
+	// Флот: сводка о себе — только по подписи соседа; обзор — после входа.
+	mux.HandleFunc("GET /api/fleet/summary", a.handleFleetSummary)
+	mux.HandleFunc("GET /api/fleet", a.requireAuth(a.handleFleet))
+	mux.HandleFunc("GET /api/fleet/members", a.requireAuth(a.handleFleetMembers))
 
 	mux.HandleFunc("POST /api/login", a.handleLogin)
 	mux.HandleFunc("GET /api/login/methods", a.handleLoginMethods)

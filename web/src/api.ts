@@ -197,6 +197,26 @@ export type ApplyResult = {
 
 export type Snapshot = { name: string; time: string; actor: string; reason: string; files: number };
 
+// ---- флот ----
+
+export type FleetMember = { id: string; label: string; url: string; self: boolean };
+
+export type FleetSummary = {
+  id: string;
+  label: string;
+  server: Overview["server"];
+  caddy: { alive: boolean; message: string };
+  sites: PublicSite[] | null;
+  warnings: Warning[] | null;
+  certificates: { domains: string[]; days_left: number }[] | null;
+  seen_unconfigured: number;
+  foreign_zones: number;
+  drift: boolean;
+  time: string;
+};
+
+export type FleetServer = { member: FleetMember; ok: boolean; error?: string; summary?: FleetSummary };
+
 export class Unauthorized extends Error {}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -279,6 +299,8 @@ export const api = {
   snapshots: () => request<{ snapshots: Snapshot[] | null }>("/api/snapshots"),
   rollback: (name: string) =>
     request<{ ok: boolean; message: string }>("/api/rollback", { method: "POST", body: JSON.stringify({ name }) }),
+  fleet: () => request<{ enabled: boolean; self?: string; servers: FleetServer[] }>("/api/fleet"),
+  fleetMembers: () => request<{ enabled: boolean; self?: string; members: FleetMember[] }>("/api/fleet/members"),
   applyPending: () => request<ApplyResult>("/api/routes/apply-pending", { method: "POST" }),
   discardPending: () => request<{ ok: boolean; message: string }>("/api/routes/discard", { method: "POST" }),
   forgetDomain: (domain: string) =>
