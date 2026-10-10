@@ -1,5 +1,6 @@
 # EdgeDeck — правила для Claude
 
+- План доработок — `PLAN.md` (P0/P1/P2, вопросы), где остановились — `HANDOFF.md`.
 - Скилл Claude Code для работы с EdgeDeck лежит в `skills/edgedeck/` (SKILL.md + references).
   **Любое изменение поведения** — поля `routes.yaml`, CLI (`--plan/--apply`), деплой, вход,
   серверы, грабли — обновляй скилл в том же коммите, затем после `git push` выполни
