@@ -237,6 +237,38 @@ func (a *app) handleRollback(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "message": "вернул файлы из снимка и применил"})
 }
 
+// handleApplyPending применяет то, что лежит в routes.yaml на диске, — правку,
+// сделанную руками или скриптом и не применённую (или откатившуюся).
+func (a *app) handleApplyPending(w http.ResponseWriter, r *http.Request) {
+	cfg, err := routes.Load(a.cfg.EdgeDir)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	for i := range cfg.Routes {
+		if err := cfg.Routes[i].Validate(); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "маршрут " + cfg.Routes[i].ID() + ": " + err.Error()})
+			return
+		}
+	}
+	a.applyAndRespond(w, r, cfg, nil, "применил правки routes.yaml с диска")
+}
+
+// handleDiscard возвращает routes.yaml к применённому; правка — в data/rejected/.
+func (a *app) handleDiscard(w http.ResponseWriter, r *http.Request) {
+	kept, err := a.applier.Discard()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	msg := "routes.yaml возвращён к применённому"
+	if kept != "" {
+		msg += "; правка сохранена в " + kept
+	}
+	a.state.Audit("discard", clientIP(r), msg, nil)
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "message": msg})
+}
+
 func (a *app) applyAndRespond(w http.ResponseWriter, r *http.Request, cfg routes.Config, adopt []string, action string) {
 	actor := clientIP(r)
 	res, err := a.applier.Apply(r.Context(), cfg, apply.Options{Actor: actor, Reason: action, Adopt: adopt})

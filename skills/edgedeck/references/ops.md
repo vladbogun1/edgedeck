@@ -23,10 +23,17 @@ ssh -i C:/Users/nikto/oracleserver.key ubuntu@150.136.40.217   # s3 (oracle-3), 
 ## CLI на сервере
 
 ```bash
-docker exec edgedeck edgedeck --plan                  # что изменится + проверка Caddy, без записи
-docker exec edgedeck edgedeck --apply --reason "…"    # снимок → запись → reload → контроль → откат
+docker exec edgedeck edgedeck --plan                  # неприменённые правки + что изменится + проверка Caddy, без записи
+docker exec edgedeck edgedeck --apply --reason "…" --actor agent:имя   # снимок → запись → reload → контроль → откат
 docker exec edgedeck edgedeck --apply --adopt a.caddy,b.caddy   # разрешить заменить файлы руками
+docker exec edgedeck edgedeck --discard               # вернуть routes.yaml к последнему применённому
 ```
+
+Применения и откаты из CLI пишутся в «Историю» и уходят в Telegram (`--actor` — кто,
+по умолчанию `ssh`). Последний применённый `routes.yaml` — `~/edgedeck/data/applied/`
+(только root: `sudo`); откат возвращает его, отвергнутая правка — в
+`~/edgedeck/data/rejected/`. Если файл разошёлся с работающим, в панели на «Доменах»
+висит жёлтая плашка с кнопками «Применить» / «Вернуть как было».
 
 Откат к снимку — в панели «История» → «Вернуть»; снимки лежат в
 `~/edgedeck/data/snapshots` обычными файлами.

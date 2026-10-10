@@ -29,6 +29,7 @@ const kinds: Record<string, { label: string; icon: LucideIcon; tone: "ok" | "war
   apply_failed: { label: "не применилось", icon: XCircle, tone: "bad" },
   rollback: { label: "откат", icon: RotateCcw, tone: "warn" },
   rollback_auto: { label: "автооткат", icon: RotateCcw, tone: "warn" },
+  discard: { label: "правка отменена", icon: RotateCcw, tone: "muted" },
 };
 
 export function HistoryView() {

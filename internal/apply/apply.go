@@ -47,6 +47,8 @@ type Applier struct {
 	// CaddyHost — имя контейнера прокси в сети edge: через него идёт контроль,
 	// то есть запросы к домену ровно так, как их сделает браузер.
 	CaddyHost string
+	// AppliedDir — где лежит копия последнего применённого routes.yaml (applied.go).
+	AppliedDir string
 }
 
 // Options — параметры применения.
@@ -92,6 +94,8 @@ type Result struct {
 	After      map[string]string `json:"after"`
 	Message    string            `json:"message"`
 	Changes    []Change          `json:"changes"`
+	// Rejected — куда сохранён отвергнутый откатом routes.yaml (если был другим).
+	Rejected string `json:"rejected,omitempty"`
 }
 
 // ---- план и валидация ----
@@ -211,15 +215,23 @@ func (a *Applier) Apply(ctx context.Context, cfg routes.Config, opts Options) (R
 		res.After = a.probeAll(ctx, domains)
 		broken = regressions(res.Before, res.After)
 		if len(broken) > 0 {
-			if err := a.restore(snapshot); err == nil {
+			if kept, err := a.restoreKeep(snapshot); err == nil {
 				_ = a.reloadFromDisk(ctx)
 				res.RolledBack = true
-				res.Message = "стало хуже (" + strings.Join(broken, "; ") + ") — откатил к состоянию до изменения"
+				res.Rejected = kept
+				res.Message = "стало хуже (" + strings.Join(broken, "; ") + ") — откатил к состоянию до изменения, routes.yaml тоже"
+				if kept != "" {
+					res.Message += "; ваша правка сохранена в " + kept
+				}
 				return res, nil
 			}
 			res.Message = "стало хуже (" + strings.Join(broken, "; ") + "), но откат не удался — смотрите снимок " + snapshot
 			return res, nil
 		}
+	}
+	if err := a.markApplied(); err != nil {
+		res.Message = "применено, остальные домены отвечают как раньше; но копию применённого routes.yaml записать не смог: " + err.Error()
+		return res, nil
 	}
 	res.Message = "применено, остальные домены отвечают как раньше"
 	return res, nil
@@ -568,7 +580,9 @@ func (a *Applier) snapshot(actor, reason string) (string, error) {
 		}
 		files++
 	}
-	if b, err := os.ReadFile(routes.Path(a.EdgeDir)); err == nil {
+	// routes.yaml — из применённого состояния, а не с диска: на диске может уже
+	// лежать правка, которую сейчас и применяют (applied.go).
+	if b, err := a.appliedRoutesFile(); err == nil {
 		if err := os.WriteFile(filepath.Join(dir, "routes.yaml"), b, 0o600); err != nil {
 			return "", err
 		}
@@ -615,14 +629,25 @@ func (a *Applier) Restore(ctx context.Context, name string) error {
 	if err := a.restore(name); err != nil {
 		return err
 	}
-	return a.reloadFromDisk(ctx)
+	if err := a.reloadFromDisk(ctx); err != nil {
+		return err
+	}
+	// Вернули состояние руками — теперь оно и есть применённое.
+	return a.markApplied()
 }
 
 func (a *Applier) restore(name string) error {
+	_, err := a.restoreKeep(name)
+	return err
+}
+
+// restoreKeep возвращает файлы и routes.yaml из снимка. Если routes.yaml на диске
+// отличался от снимка, его копия кладётся в data/rejected/ — путь возвращается.
+func (a *Applier) restoreKeep(name string) (string, error) {
 	dir := filepath.Join(a.SnapshotDir, filepath.Base(name))
 	entries, err := os.ReadDir(filepath.Join(dir, "sites"))
 	if err != nil {
-		return fmt.Errorf("снимок %s не читается: %w", name, err)
+		return "", fmt.Errorf("снимок %s не читается: %w", name, err)
 	}
 	// Сначала убираем свои файлы, которых в снимке нет, потом восстанавливаем.
 	inSnapshot := map[string]bool{}
@@ -631,7 +656,7 @@ func (a *Applier) restore(name string) error {
 	}
 	current, manualSet, err := a.sitesState(nil)
 	if err != nil {
-		return err
+		return "", err
 	}
 	for fname := range current {
 		if inSnapshot[fname] || manualSet[fname] {
@@ -642,16 +667,18 @@ func (a *Applier) restore(name string) error {
 	for _, e := range entries {
 		b, err := os.ReadFile(filepath.Join(dir, "sites", e.Name()))
 		if err != nil {
-			return err
+			return "", err
 		}
 		if err := routes.WriteFileAsDirOwner(filepath.Join(a.sitesDir(), e.Name()), b); err != nil {
-			return err
+			return "", err
 		}
 	}
+	kept := ""
 	if b, err := os.ReadFile(filepath.Join(dir, "routes.yaml")); err == nil {
+		kept = a.keepRejected(b)
 		if err := routes.WriteFileAsDirOwner(routes.Path(a.EdgeDir), b); err != nil {
-			return err
+			return "", err
 		}
 	}
-	return nil
+	return kept, nil
 }

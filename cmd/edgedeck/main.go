@@ -34,6 +34,8 @@ func main() {
 	applyMode := flag.Bool("apply", false, "применить routes.yaml: снимок, запись, контроль, откат при поломке")
 	adoptList := flag.String("adopt", "", "файлы руками через запятую, которые разрешено заменить сгенерированными")
 	reason := flag.String("reason", "", "что меняем — попадёт в снимок и журнал")
+	discardMode := flag.Bool("discard", false, "вернуть routes.yaml к последнему применённому (правка сохранится в data/rejected)")
+	actor := flag.String("actor", "", "кто применяет — для журнала, например agent:commerce-engine (по умолчанию ssh)")
 	flag.Parse()
 
 	log := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -67,14 +69,22 @@ func main() {
 		log.Error("конфигурация не загрузилась", "err", err)
 		os.Exit(1)
 	}
-	if *planMode || *applyMode {
+	if *planMode || *applyMode || *discardMode {
 		var adopt []string
 		for _, f := range strings.Split(*adoptList, ",") {
 			if f = strings.TrimSpace(f); f != "" {
 				adopt = append(adopt, f)
 			}
 		}
-		if err := server.RunCLI(ctx, cfg, *applyMode, adopt, *reason, os.Stdout); err != nil {
+		mode := server.CLIPlan
+		switch {
+		case *discardMode:
+			mode = server.CLIDiscard
+		case *applyMode:
+			mode = server.CLIApply
+		}
+		opts := server.CLIOptions{Mode: mode, Adopt: adopt, Reason: *reason, Actor: *actor}
+		if err := server.RunCLI(ctx, cfg, opts, os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, "ошибка:", err)
 			os.Exit(1)
 		}

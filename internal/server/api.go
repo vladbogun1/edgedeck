@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/vladbogun1/edgedeck/internal/apply"
 	"github.com/vladbogun1/edgedeck/internal/auth"
 	"github.com/vladbogun1/edgedeck/internal/caddyx"
 	"github.com/vladbogun1/edgedeck/internal/firewall"
@@ -236,6 +237,8 @@ type overview struct {
 	Certs       []caddyx.Certificate `json:"certificates"`
 	Warnings    []warning            `json:"warnings"`
 	Caddy       caddyStatus          `json:"caddy"`
+	// Drift — routes.yaml или файлы сайтов разошлись с применённым (applied.go).
+	Drift *apply.Drift `json:"drift,omitempty"`
 }
 
 type serverInfo struct {
@@ -290,6 +293,10 @@ func (a *app) handleOverview(w http.ResponseWriter, r *http.Request) {
 		Caddy:       caddyStatus{Alive: alive, Message: aliveMsg},
 	}
 	fillSystem(&ov.Server, a.cfg.HostProcDir, a.cfg.EdgeDir)
+
+	if d, err := a.applier.CheckDrift(); err == nil && !d.Empty() {
+		ov.Drift = &d
+	}
 
 	if certErr != nil {
 		ov.Warnings = append(ov.Warnings, warning{

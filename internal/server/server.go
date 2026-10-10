@@ -100,6 +100,10 @@ func Run(ctx context.Context, cfg config.Config) error {
 		SnapshotDir: filepath.Join(cfg.DataDir, "snapshots"),
 		Caddy:       a.caddy,
 		CaddyHost:   caddyHostName(cfg.CaddyAdminURL),
+		AppliedDir:  filepath.Join(cfg.DataDir, "applied"),
+	}
+	if err := a.applier.EnsureApplied(); err != nil {
+		slog.Warn("не смог завести копию применённого routes.yaml", "err", err)
 	}
 
 	// Страница «сервис не отвечает» кладётся при старте: она нужна в момент
@@ -196,6 +200,8 @@ func (a *app) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/routes/save", a.requireAuth(a.handleRouteSave))
 	mux.HandleFunc("POST /api/routes/delete", a.requireAuth(a.handleRouteDelete))
 	mux.HandleFunc("POST /api/routes/import", a.requireAuth(a.handleRouteImport))
+	mux.HandleFunc("POST /api/routes/apply-pending", a.requireAuth(a.handleApplyPending))
+	mux.HandleFunc("POST /api/routes/discard", a.requireAuth(a.handleDiscard))
 	mux.HandleFunc("GET /api/snapshots", a.requireAuth(a.handleSnapshots))
 	mux.HandleFunc("GET /api/settings", a.requireAuth(a.handleSettings))
 	mux.HandleFunc("POST /api/settings/test-telegram", a.requireAuth(a.handleTestTelegram))

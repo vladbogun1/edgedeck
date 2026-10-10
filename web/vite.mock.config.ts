@@ -51,6 +51,7 @@ const data: Record<string, unknown> = {
       },
     ],
     caddy: { alive: true, message: "" },
+    drift: { added: ["engine.bogun.site/", "admin.engine.bogun.site/"], removed: ["chisetup.150-136-40-217.sslip.io/"], changed: null, files: null },
   },
   "/api/routes": {
     routes: [

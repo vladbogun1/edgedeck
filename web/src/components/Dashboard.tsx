@@ -175,6 +175,35 @@ export function Dashboard({ overview, onChanged }: { overview: Overview | null; 
         </div>
       )}
 
+      {overview.drift && (
+        <DriftCallout
+          drift={overview.drift}
+          busy={busy === "drift"}
+          onApply={async () => {
+            setBusy("drift");
+            try {
+              await afterChange(await api.applyPending());
+            } catch (e) {
+              setError(e instanceof Error ? e.message : "не вышло");
+            } finally {
+              setBusy("");
+            }
+          }}
+          onDiscard={async () => {
+            if (!confirm("Вернуть routes.yaml к последнему применённому? Правка сохранится в data/rejected.")) return;
+            setBusy("drift");
+            try {
+              await api.discardPending();
+              onChanged();
+            } catch (e) {
+              setError(e instanceof Error ? e.message : "не вышло");
+            } finally {
+              setBusy("");
+            }
+          }}
+        />
+      )}
+
       {overview.warnings.length > 0 && (
         <div className="space-y-2">
           {overview.warnings.map((w, i) => (
@@ -387,6 +416,63 @@ export function Dashboard({ overview, onChanged }: { overview: Overview | null; 
           onClose={() => setWizard(null)}
           onDone={afterChange}
         />
+      )}
+    </div>
+  );
+}
+
+// Плашка «routes.yaml разошёлся с тем, что работает»: правка руками или
+// скриптом, не применённая или откатившаяся (applied.go на сервере).
+function DriftCallout({
+  drift,
+  busy,
+  onApply,
+  onDiscard,
+}: {
+  drift: NonNullable<Overview["drift"]>;
+  busy: boolean;
+  onApply: () => void;
+  onDiscard: () => void;
+}) {
+  const items = [
+    ...(drift.added ?? []).map((x) => ({ sign: "+", x, cls: "text-ok" })),
+    ...(drift.removed ?? []).map((x) => ({ sign: "−", x, cls: "text-bad" })),
+    ...(drift.changed ?? []).map((x) => ({ sign: "~", x, cls: "text-warn" })),
+  ];
+  const files = drift.files ?? [];
+  return (
+    <div className="callout flex flex-wrap gap-3 [--tone:var(--color-warn)]">
+      <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warn" />
+      <div className="min-w-0 flex-1">
+        {items.length > 0 && (
+          <>
+            <div className="font-medium text-warn">В routes.yaml есть неприменённые правки</div>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {items.map((i) => (
+                <span key={i.sign + i.x} className="chip font-mono">
+                  <span className={i.cls}>{i.sign}</span>
+                  {i.x}
+                </span>
+              ))}
+            </div>
+          </>
+        )}
+        {files.length > 0 && (
+          <div className={cn("text-sm text-muted", items.length > 0 && "mt-2")}>
+            <span className="text-warn">Файлы сайтов правили руками</span> — при следующем применении перезапишутся:{" "}
+            <span className="font-mono">{files.join(", ")}</span>
+          </div>
+        )}
+      </div>
+      {items.length > 0 && (
+        <div className="flex items-start gap-2">
+          <button onClick={onApply} disabled={busy} className="btn btn-soft btn-sm">
+            Применить
+          </button>
+          <button onClick={onDiscard} disabled={busy} className="btn btn-ghost btn-sm">
+            Вернуть как было
+          </button>
+        </div>
       )}
     </div>
   );

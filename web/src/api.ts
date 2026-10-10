@@ -57,6 +57,8 @@ export type Overview = {
   certificates: Certificate[];
   warnings: Warning[];
   caddy: { alive: boolean; message: string };
+  // routes.yaml или файлы сайтов разошлись с последним применённым.
+  drift?: { added: string[] | null; removed: string[] | null; changed: string[] | null; files: string[] | null };
 };
 
 export type ContainerPort = {
@@ -277,6 +279,8 @@ export const api = {
   snapshots: () => request<{ snapshots: Snapshot[] | null }>("/api/snapshots"),
   rollback: (name: string) =>
     request<{ ok: boolean; message: string }>("/api/rollback", { method: "POST", body: JSON.stringify({ name }) }),
+  applyPending: () => request<ApplyResult>("/api/routes/apply-pending", { method: "POST" }),
+  discardPending: () => request<{ ok: boolean; message: string }>("/api/routes/discard", { method: "POST" }),
   forgetDomain: (domain: string) =>
     request<{ ok: boolean }>("/api/forget-domain", { method: "POST", body: JSON.stringify({ domain }) }),
   trustZone: (domain: string, trusted: boolean) =>
