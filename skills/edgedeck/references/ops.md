@@ -15,7 +15,11 @@ ssh -i C:/Users/nikto/oracleserver.key ubuntu@150.136.40.217   # s3 (oracle-3), 
 Адреса панелей: **`https://bogun.site`** — хаб (обзор флота, страница единого входа),
 `https://s1.bogun.site`, `https://s3.bogun.site`, `http://s2.bogun.site` (s2 — только http,
 пока `:443` у xray). JARVIS — `https://jarvis.bogun.site` (за единым входом),
-Vaultwarden — `https://bogun.site/vault/` (свой вход), логи — `https://bogun.site/logs/`. Полная карта сервисов: `D:\CLOUDE\_kb\servers.md`.
+Vaultwarden — `https://bogun.site/vault/` (свой вход), логи — `https://bogun.site/logs/`.
+Portainer — `https://portainer.bogun.site` (все три сервера внутри), PufferPanel —
+`https://puffer.bogun.site` (s1; s2 пока отдельно на `:8080`, перенос нодой — PLAN.md).
+Оба за единым входом, свой вход у каждого остаётся. DNS `bogun.site` — в Cloudflare
+(скилл `cloudflare-dns`). Полная карта сервисов: `D:\CLOUDE\_kb\servers.md`.
 
 На каждом сервере:
 - `~/edge` — Caddy (`edge_caddy`, сеть `edge`, том `edge_caddy_data` — **не удалять**:

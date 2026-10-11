@@ -368,7 +368,13 @@ P0-3 (журнал и Telegram для `--apply`).
 
 **Этап C — единый вход (Q-2) и `bogun.site` как хаб.** ✅ 11.10: хаб на `bogun.site`, JARVIS на
 `jarvis.bogun.site`, `/logs/` за единым входом. Осталось: Portainer, PufferPanel, ai,
-VictoriaMetrics за вход — нужны A-записи. Подписанный токен на `.bogun.site`,
+VictoriaMetrics за вход — нужны A-записи.
+  ✅ 11.10: DNS `bogun.site` переехал в Cloudflare (скилл `cloudflare-dns`), Portainer
+  (`portainer.bogun.site`) и PufferPanel s1 (`puffer.bogun.site`) за единым входом,
+  `s3.bogun.site` — панель s3. **Дальше:** PufferPanel s2 → нодой в общую панель (нужны
+  правило Oracle Security List s2 TCP 8443 с `132.145.132.80/32` и окно 5–10 мин — сервис
+  на s2 перезапустится), смена `sessionkey` PufferPanel, затем закрыть порты админок
+  (PufferPanel `:8080` s1/s2, Portainer `:8082`/`:9443` s1). Подписанный токен на `.bogun.site`,
 `auth: edgedeck` в модели маршрута, страница входа с возвратом. Переезд JARVIS на
 `jarvis.bogun.site` (нужна A-запись), корень `bogun.site` → хаб, `/logs/` на новый вход.
 Затем сервисы: Portainer, PufferPanel, ai, VictoriaMetrics — каждый поддоменом за входом
