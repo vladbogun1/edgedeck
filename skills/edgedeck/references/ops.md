@@ -17,7 +17,13 @@ ssh -i C:/Users/nikto/oracleserver.key ubuntu@150.136.40.217   # s3 (oracle-3), 
 пока `:443` у xray). JARVIS — `https://jarvis.bogun.site` (за единым входом),
 Vaultwarden — `https://bogun.site/vault/` (свой вход), логи — `https://bogun.site/logs/`.
 Portainer — `https://portainer.bogun.site` (все три сервера внутри), PufferPanel —
-`https://puffer.bogun.site` (s1; s2 пока отдельно на `:8080`, перенос нодой — PLAN.md).
+`https://puffer.bogun.site` — одна панель на все серверы (с 11.10.2026): главная на s1,
+s2 — удалённая нода `S2`. Каналы: панель → нода `https://pp-s2.bogun.site:8443` (Caddy s2,
+файл руками `sites/pp-s2.bogun.site.caddy`, только с IP s1; порт открыт в Oracle Security List
+s2 для s1), нода → панель `https://pp-master.bogun.site` (маршрут s1, `allow_ips` = IP s2, без
+единого входа). На s2 PufferPanel в режиме ноды (`panel.enable: false`), слушает
+`172.17.0.1:8080` (мост Docker) — снаружи закрыт. Portainer на s1 опубликован только на
+`127.0.0.1` (9443/8082/8000). SFTP ноды s2 (`:5657`) снаружи закрыт.
 Оба за единым входом, свой вход у каждого остаётся. DNS `bogun.site` — в Cloudflare
 (скилл `cloudflare-dns`). Полная карта сервисов: `D:\CLOUDE\_kb\servers.md`.
 

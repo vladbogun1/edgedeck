@@ -371,7 +371,10 @@ P0-3 (журнал и Telegram для `--apply`).
 VictoriaMetrics за вход — нужны A-записи.
   ✅ 11.10: DNS `bogun.site` переехал в Cloudflare (скилл `cloudflare-dns`), Portainer
   (`portainer.bogun.site`) и PufferPanel s1 (`puffer.bogun.site`) за единым входом,
-  `s3.bogun.site` — панель s3. **Дальше:** PufferPanel s2 → нодой в общую панель (нужны
+  `s3.bogun.site` — панель s3. ✅ 11.10: PufferPanel s2 — нода общей панели (`pp-s2:8443` ↔ `pp-master`), `:8080` на s2 закрыт,
+  Portainer на s1 только `127.0.0.1`, `ai.bogun.site` за единым входом. **Осталось (нужен
+  перезапуск PufferPanel s1 — уронит «Build V_lastelin»):** `web.host` s1 → `172.17.0.1:8080`
+  (закрыть `:8080`), смена `sessionkey`. ~~Дальше:~~ PufferPanel s2 → нодой в общую панель (нужны
   правило Oracle Security List s2 TCP 8443 с `132.145.132.80/32` и окно 5–10 мин — сервис
   на s2 перезапустится), смена `sessionkey` PufferPanel, затем закрыть порты админок
   (PufferPanel `:8080` s1/s2, Portainer `:8082`/`:9443` s1). Подписанный токен на `.bogun.site`,
