@@ -236,7 +236,8 @@ export const api = {
   session: () => request<{ authenticated: boolean }>("/api/session"),
   login: (password: string) =>
     request<{ ok: boolean }>("/api/login", { method: "POST", body: JSON.stringify({ password }) }),
-  loginMethods: () => request<{ telegram: boolean }>("/api/login/methods"),
+  loginMethods: () => request<{ telegram: boolean; sso_domain?: string }>("/api/login/methods"),
+  logoutAll: () => request<{ ok: boolean; unreached: string[] | null }>("/api/logout-all", { method: "POST" }),
   sendCode: () => request<{ challenge: string }>("/api/login/telegram/send", { method: "POST" }),
   loginCode: (challenge: string, code: string) =>
     request<{ ok: boolean }>("/api/login/telegram", { method: "POST", body: JSON.stringify({ challenge, code }) }),

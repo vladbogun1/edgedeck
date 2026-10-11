@@ -2,6 +2,7 @@ package server
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/vladbogun1/edgedeck/internal/auth"
 )
@@ -75,8 +76,8 @@ func (a *app) handleSettings(w http.ResponseWriter, r *http.Request) {
 	resp.Caddy.Message = msg
 
 	resp.Sessions = a.auth.Sessions()
-	if sess := a.currentSession(r); sess != nil {
-		resp.PasswordFresh = sess.Fresh()
+	if since, ok := a.authed(r); ok {
+		resp.PasswordFresh = time.Since(since) < auth.FreshWindow
 	}
 	resp.Watch.Interval = "1 минута"
 	resp.Watch.DownWarn = "5 минут"

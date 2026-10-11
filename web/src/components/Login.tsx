@@ -9,9 +9,10 @@ import { CountUp, SiteIcon, Skeleton, cn, hueOf, plural, rise, stackBy, stagger,
 // Наружу тут только то, что публично и так: имена доменов и то, что сайты сами
 // о себе публикуют (title, description, иконка, og:image). Ни контейнеров, ни
 // портов, ни ненастроенных доменов, ни имени сервера — см. internal/server/public.go.
-export function Login({ onSuccess }: { onSuccess: () => void }) {
+export function Login({ onSuccess, autoOpen = false }: { onSuccess: () => void; autoOpen?: boolean }) {
   const [sites, setSites] = useState<PublicSite[] | null>(null);
-  const [showLogin, setShowLogin] = useState(false);
+  // Пришли со своего сервиса за входом (?rd=) — окно входа сразу.
+  const [showLogin, setShowLogin] = useState(autoOpen);
 
   useEffect(() => {
     void (async () => {

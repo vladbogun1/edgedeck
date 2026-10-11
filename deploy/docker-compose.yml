@@ -79,6 +79,9 @@ services:
       EDGEDECK_SERVER_ID: ${EDGEDECK_SERVER_ID:-}
       # Свои зоны без маршрутов на этом сервере (например bogun.site на s2 для s2.bogun.site).
       EDGEDECK_TRUSTED_ZONES: ${EDGEDECK_TRUSTED_ZONES:-}
+      # Единый вход (PLAN.md Q-2): домен cookie и адрес страницы входа (хаб).
+      EDGEDECK_SSO_DOMAIN: ${EDGEDECK_SSO_DOMAIN:-}
+      EDGEDECK_SSO_LOGIN: ${EDGEDECK_SSO_LOGIN:-}
     volumes:
       # Каталог Caddy: на этапе 0 только читаем, дальше будем писать routes.yaml.
       - ${EDGE_DIR:-/home/ubuntu/edge}:/edge

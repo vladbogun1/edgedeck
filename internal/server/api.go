@@ -58,15 +58,33 @@ func (a *app) handleLogout(w http.ResponseWriter, r *http.Request) {
 		a.auth.Drop(c.Value)
 	}
 	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: "", Path: "/", MaxAge: -1})
+	a.sso.clearCookie(w)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// handleLogoutAll — выйти везде: все сессии этой панели, все токены единого
+// входа на всех серверах флота (сосед получает подписанный сигнал).
+func (a *app) handleLogoutAll(w http.ResponseWriter, r *http.Request) {
+	now := time.Now()
+	a.sso.revoke(now)
+	a.auth.DropAll()
+	failed := a.broadcastRevoke(r, now)
+	a.state.Audit("logout_all", clientIP(r), "выход везде", map[string]any{"не_дошло": failed})
+	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: "", Path: "/", MaxAge: -1})
+	a.sso.clearCookie(w)
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "unreached": failed})
 }
 
 // handleSession — единственное, что можно спросить без входа: «я залогинен?».
 // Ничего о сервере не рассказывает.
 func (a *app) handleSession(w http.ResponseWriter, r *http.Request) {
-	authed := false
-	if c, err := r.Cookie(sessionCookie); err == nil {
-		_, authed = a.auth.Check(c.Value)
+	_, authed := a.authed(r)
+	// Вошли в панель до появления единого входа (или на другом хосте) — выдаём
+	// токен, чтобы соседние панели и свои сервисы пускали без повторного входа.
+	if authed && a.sso.enabled() && a.sso.inDomain(r.Host) {
+		if _, ok := a.sso.fromRequest(r); !ok {
+			a.sso.setCookie(w, r)
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"authenticated": authed})
 }
@@ -83,7 +101,8 @@ func (a *app) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 	ip := clientIP(r)
 	// В первые минуты после входа текущий пароль не спрашиваем: вход только что
 	// подтвердил личность, а пароль мог быть забыт — ради этого и есть вход кодом.
-	if sess := a.currentSession(r); sess == nil || !sess.Fresh() || req.Current != "" {
+	since, _ := a.authed(r)
+	if time.Since(since) >= auth.FreshWindow || req.Current != "" {
 		if err := a.auth.Verify(req.Current, ip); err != nil {
 			msg := "текущий пароль не подошёл"
 			if err == auth.ErrLocked {

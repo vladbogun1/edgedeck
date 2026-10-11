@@ -68,7 +68,11 @@ export function Shell({ onLogout }: { onLogout: () => void }) {
     const t = setInterval(() => void reload(), 15000);
     api
       .fleetMembers()
-      .then((f) => setFleet(f.enabled ? f.members : []))
+      .then((f) => {
+        setFleet(f.enabled ? f.members : []);
+        // Во флоте главная — общий обзор, если раздел не выбран явно.
+        if (f.enabled && !window.location.hash) setTabState("fleet");
+      })
       .catch(() => {});
     const onHash = () => setTabState(tabFromHash());
     window.addEventListener("hashchange", onHash);

@@ -116,7 +116,23 @@ export function SettingsView() {
       <PasswordSection fresh={s.password_fresh} onNote={setNote} />
 
       {s.sessions && s.sessions.length > 0 && (
-        <Section title="Активные сессии" count={s.sessions.length}>
+        <Section
+          title="Активные сессии"
+          count={s.sessions.length}
+          actions={
+            <button
+              onClick={async () => {
+                if (!confirm("Выйти на всех устройствах и на всех серверах? Придётся войти заново.")) return;
+                const r = await api.logoutAll();
+                if (r.unreached?.length) alert("Не дошло до: " + r.unreached.join(", ") + " — там токены истекут сами.");
+                window.location.reload();
+              }}
+              className="btn btn-danger btn-sm"
+            >
+              Выйти везде
+            </button>
+          }
+        >
           <div className="card rows overflow-hidden">
             {s.sessions.map((x) => (
               <div key={x.token} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 sm:px-5">

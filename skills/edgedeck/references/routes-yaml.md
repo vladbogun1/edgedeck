@@ -56,6 +56,7 @@ routes:
 | `max_upload` | сайт / путь | `128MB`. У корня — на весь сайт, у пути — только в его handle |
 | `deny_paths` | сайт | 404 без тела. `/api/metrics` — ровно этот путь; `/admin/` или `/admin*` — весь раздел. Бьёт и по браузеру |
 | `allow_ips` | сайт | пускать только с адресов/CIDR, остальным 403 |
+| `sso` | путь | `true` — пускать только после единого входа EdgeDeck (код в Telegram): без входа редирект на `https://bogun.site/?rd=…` и обратно. Для своих сервисов (JARVIS, логи, Portainer, PufferPanel). **Не** для Vaultwarden и всего, у чего свои клиенты/API-токены |
 | `auth` | путь | forward_auth: `{upstream: jarvis:4000, uri: /api/authcheck, header_up: [{name: X-Original-URI, value: "{uri}"}], copy_headers: [Cookie]}` |
 | `hide_upstream_csp` + `csp` | маршрут | снять CSP апстрима и поставить свой. Свой CSP можно задать и через `headers` |
 | `flush` | маршрут | `flush_interval -1`: события, стримы, камера (nginx `proxy_buffering off`) |

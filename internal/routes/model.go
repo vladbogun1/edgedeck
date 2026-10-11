@@ -73,6 +73,12 @@ type Route struct {
 	HideUpstreamCSP bool   `yaml:"hide_upstream_csp,omitempty" json:"hide_upstream_csp,omitempty"`
 	CSP             string `yaml:"csp,omitempty" json:"csp,omitempty"`
 
+	// SSO — пускать только после единого входа EdgeDeck (код в Telegram):
+	// forward_auth к локальной панели, без входа — редирект на вход и обратно.
+	// Для своих сервисов (JARVIS, логи, Portainer, PufferPanel); не для того,
+	// у чего свои клиенты (Vaultwarden).
+	SSO bool `yaml:"sso,omitempty" json:"sso,omitempty"`
+
 	// Auth — «требовать вход»: спросить у чужой панели, есть ли сессия.
 	Auth *ForwardAuth `yaml:"auth,omitempty" json:"auth,omitempty"`
 
@@ -347,6 +353,9 @@ func (r *Route) Validate() error {
 				return fmt.Errorf("«%s» не адрес и не подсеть", ip)
 			}
 		}
+	}
+	if r.SSO && r.Auth != nil && r.Auth.Upstream != "" {
+		return fmt.Errorf("единый вход и вход через другую панель одновременно — выберите одно")
 	}
 	if r.HideUpstreamCSP && r.CSP == "" && !hasHeader(r.Headers, "Content-Security-Policy") {
 		return fmt.Errorf("снимать CSP апстрима без своей политики опасно: страница останется без CSP вообще")

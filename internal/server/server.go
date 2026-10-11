@@ -53,6 +53,7 @@ type app struct {
 	notify   *notify.Notifier
 	watch    *watchState
 	fleet    fleetConfig
+	sso      *ssoConfig
 }
 
 func Run(ctx context.Context, cfg config.Config) error {
@@ -103,6 +104,10 @@ func Run(ctx context.Context, cfg config.Config) error {
 		Caddy:       a.caddy,
 		CaddyHost:   caddyHostName(cfg.CaddyAdminURL),
 		AppliedDir:  filepath.Join(cfg.DataDir, "applied"),
+	}
+	a.sso = loadSSO(a.fleet, cfg.DataDir)
+	if a.sso.enabled() {
+		slog.Info("единый вход включён", "домен", a.sso.domain, "вход", a.sso.login)
 	}
 	if err := a.applier.EnsureApplied(); err != nil {
 		slog.Warn("не смог завести копию применённого routes.yaml", "err", err)
@@ -182,6 +187,11 @@ func (a *app) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/fleet/summary", a.handleFleetSummary)
 	mux.HandleFunc("GET /api/fleet", a.requireAuth(a.handleFleet))
 	mux.HandleFunc("GET /api/fleet/members", a.requireAuth(a.handleFleetMembers))
+	mux.HandleFunc("POST /api/fleet/revoke", a.handleFleetRevoke)
+
+	// Единый вход: проверка для Caddy forward_auth (маршруты с sso: true).
+	mux.HandleFunc("GET /internal/sso/check", a.handleSSOCheck)
+	mux.HandleFunc("POST /api/logout-all", a.requireAuth(a.handleLogoutAll))
 
 	mux.HandleFunc("POST /api/login", a.handleLogin)
 	mux.HandleFunc("GET /api/login/methods", a.handleLoginMethods)
@@ -239,13 +249,9 @@ func (a *app) middleware(next http.Handler) http.Handler {
 
 func (a *app) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		c, err := r.Cookie(sessionCookie)
-		if err != nil {
+		// Своя сессия панели или токен единого входа (sso.go).
+		if _, ok := a.authed(r); !ok {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "нужен вход"})
-			return
-		}
-		if _, ok := a.auth.Check(c.Value); !ok {
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "сессия истекла"})
 			return
 		}
 		next(w, r)

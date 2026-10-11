@@ -17,6 +17,14 @@ const (
 	ErrorPageFile = "error.html"
 )
 
+// PanelUpstream — адрес панели EdgeDeck в сети Caddy.
+const PanelUpstream = "edgedeck:4000"
+
+// SSOCookieStrip — регулярка, которой из запросов к приложениям вырезается
+// cookie единого входа (edgedeck_sso): токен пускает во все свои сервисы и
+// панели, и приложение на поддомене не должно его видеть.
+const SSOCookieStrip = `edgedeck_sso=[^;]*;? *`
+
 // HideStack срезает с ответа то, что выдаёт начинку сайта: версию nginx за
 // прокси, «X-Powered-By: Next.js», «Via: 1.1 Caddy». Защиты это не даёт —
 // сканеры узнают софт и по поведению, — но и раздавать версии незачем.
@@ -169,6 +177,10 @@ func renderDomain(domain string, list []Route) string {
 func renderBody(r Route, domain string) string {
 	var b strings.Builder
 
+	if r.SSO {
+		b.WriteString("# Единый вход EdgeDeck: без входа — на страницу входа и обратно\n")
+		fmt.Fprintf(&b, "forward_auth %s {\n\turi /internal/sso/check\n}\n", PanelUpstream)
+	}
 	if r.Auth != nil && r.Auth.Upstream != "" {
 		fmt.Fprintf(&b, "# Требовать вход: спрашиваем у %s, есть ли активная сессия\n", r.Auth.Upstream)
 		fmt.Fprintf(&b, "forward_auth %s {\n\turi %s\n", r.Auth.Upstream, r.Auth.URI)
@@ -185,6 +197,10 @@ func renderBody(r Route, domain string) string {
 	case TypeProxy:
 		fmt.Fprintf(&b, "reverse_proxy %s {\n", r.Target.Addr())
 		b.WriteString("\theader_up X-Real-IP {remote_host}\n")
+		if r.Target.Addr() != PanelUpstream {
+			// Токен единого входа нужен только панели: в приложения его не отдаём.
+			fmt.Fprintf(&b, "\theader_up Cookie %s \"\"\n", quoteValue(SSOCookieStrip))
+		}
 		if r.HideUpstreamCSP {
 			b.WriteString("\t# Снимаем CSP апстрима: два заголовка браузер объединит по пересечению\n")
 			b.WriteString("\t# и страница сломается на первом же расхождении (DESIGN.md §2.11)\n")

@@ -146,7 +146,11 @@ func (s *otpStore) pruneLocked(now time.Time) {
 // handleLoginMethods — каким способом можно войти. Только «есть ли Telegram»,
 // ничего о сервере.
 func (a *app) handleLoginMethods(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"telegram": a.notify.Enabled()})
+	out := map[string]any{"telegram": a.notify.Enabled()}
+	if a.sso.enabled() {
+		out["sso_domain"] = a.sso.domain
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (a *app) handleOTPSend(w http.ResponseWriter, r *http.Request) {
@@ -217,6 +221,7 @@ func (a *app) handleOTPLogin(w http.ResponseWriter, r *http.Request) {
 
 // startSession ставит куку сессии — общее для входа паролем и кодом.
 func (a *app) startSession(w http.ResponseWriter, r *http.Request, sess *auth.Session) {
+	a.sso.setCookie(w, r)
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookie,
 		Value:    sess.Token,

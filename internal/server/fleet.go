@@ -228,6 +228,45 @@ func shortNetErr(err error) string {
 	return msg
 }
 
+// broadcastRevoke рассылает соседям «выйти везде». Возвращает тех, до кого не дошло.
+func (a *app) broadcastRevoke(r *http.Request, t time.Time) []string {
+	if !a.fleet.enabled() {
+		return nil
+	}
+	var mu sync.Mutex
+	var failed []string
+	var wg sync.WaitGroup
+	for _, m := range a.fleet.members {
+		if m.Self {
+			continue
+		}
+		wg.Add(1)
+		go func(m fleetMember) {
+			defer wg.Done()
+			const path = "/api/fleet/revoke"
+			ts := strconv.FormatInt(time.Now().Unix(), 10)
+			req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, m.API+path+"?t="+strconv.FormatInt(t.Unix(), 10), nil)
+			if err == nil {
+				req.Header.Set(fleetHeader, ts+"."+a.fleet.mac(ts, http.MethodPost, path))
+				var resp *http.Response
+				if resp, err = fleetClient.Do(req); err == nil {
+					resp.Body.Close()
+					if resp.StatusCode != http.StatusNoContent {
+						err = fmt.Errorf("%d", resp.StatusCode)
+					}
+				}
+			}
+			if err != nil {
+				mu.Lock()
+				failed = append(failed, m.ID)
+				mu.Unlock()
+			}
+		}(m)
+	}
+	wg.Wait()
+	return failed
+}
+
 // handleFleet — общий обзор для вошедшего пользователя.
 func (a *app) handleFleet(w http.ResponseWriter, r *http.Request) {
 	if !a.fleet.enabled() {
