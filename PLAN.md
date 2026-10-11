@@ -366,7 +366,9 @@ P0-3 (журнал и Telegram для `--apply`).
 серверов в шапке панели. Нужны A-записи у Hostinger: `s1.bogun.site`, `s3.bogun.site` →
 свои IP (`s2.` — после этапа E).
 
-**Этап C — единый вход (Q-2) и `bogun.site` как хаб.** Подписанный токен на `.bogun.site`,
+**Этап C — единый вход (Q-2) и `bogun.site` как хаб.** ✅ 11.10: хаб на `bogun.site`, JARVIS на
+`jarvis.bogun.site`, `/logs/` за единым входом. Осталось: Portainer, PufferPanel, ai,
+VictoriaMetrics за вход — нужны A-записи. Подписанный токен на `.bogun.site`,
 `auth: edgedeck` в модели маршрута, страница входа с возвратом. Переезд JARVIS на
 `jarvis.bogun.site` (нужна A-запись), корень `bogun.site` → хаб, `/logs/` на новый вход.
 Затем сервисы: Portainer, PufferPanel, ai, VictoriaMetrics — каждый поддоменом за входом

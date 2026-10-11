@@ -459,7 +459,8 @@ function DriftCallout({
         )}
         {files.length > 0 && (
           <div className={cn("text-sm text-muted", items.length > 0 && "mt-2")}>
-            <span className="text-warn">Файлы сайтов правили руками</span> — при следующем применении перезапишутся:{" "}
+            <span className="text-warn">Файлы сайтов отличаются от генератора</span> (правили руками или обновилась панель) —
+            при следующем применении перезапишутся:{" "}
             <span className="font-mono">{files.join(", ")}</span>
           </div>
         )}

@@ -10,7 +10,12 @@ ssh -i C:/Users/nikto/oracleserver.key ubuntu@150.136.127.73   # s2, VPN/бот�
 ssh -i C:/Users/nikto/oracleserver.key ubuntu@150.136.40.217   # s3 (oracle-3), новое и демо
 ```
 
-Ключа нет в `~/.ssh` — всегда `-i`. Полная карта сервисов: `D:\CLOUDE\_kb\servers.md`.
+Ключа нет в `~/.ssh` — всегда `-i`.
+
+Адреса панелей: **`https://bogun.site`** — хаб (обзор флота, страница единого входа),
+`https://s1.bogun.site`, `https://s3.bogun.site`, `http://s2.bogun.site` (s2 — только http,
+пока `:443` у xray). JARVIS — `https://jarvis.bogun.site` (за единым входом),
+Vaultwarden — `https://bogun.site/vault/` (свой вход), логи — `https://bogun.site/logs/`. Полная карта сервисов: `D:\CLOUDE\_kb\servers.md`.
 
 На каждом сервере:
 - `~/edge` — Caddy (`edge_caddy`, сеть `edge`, том `edge_caddy_data` — **не удалять**:

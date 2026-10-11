@@ -87,7 +87,7 @@ func RunCLI(ctx context.Context, cfg config.Config, o CLIOptions, out io.Writer)
 			fmt.Fprintf(out, "в routes.yaml неприменённые правки: %s\n", s)
 		}
 		if len(d.Files) > 0 {
-			fmt.Fprintf(out, "файлы сайтов правили руками (перезапишутся при применении): %s\n", strings.Join(d.Files, ", "))
+			fmt.Fprintf(out, "файлы сайтов отличаются от генератора — правили руками или обновилась панель (перезапишутся при применении): %s\n", strings.Join(d.Files, ", "))
 		}
 	}
 
