@@ -151,6 +151,11 @@ func (a *app) checkUnconfigured(ctx context.Context) {
 			continue
 		}
 		if !a.trust.Trusted(d.Host) {
+			// Имя из sslip.io и подобных само указывает на наш адрес — это не
+			// «чужой домен, направленный на нас», а выдумка сканера.
+			if isWildcardDNS(zoneOf(d.Host)) {
+				continue
+			}
 			// Сканер с подставленным Host (www.google.com) — не новость. Новость —
 			// чужой домен, чья A-запись действительно смотрит на нас.
 			if !d.PointsHere {

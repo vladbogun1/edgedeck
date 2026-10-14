@@ -219,6 +219,16 @@ func (a *app) handleTLSAsk(w http.ResponseWriter, r *http.Request) {
 		respondAsk(w, false)
 		return
 	}
+	// Своя зона, но под wildcard: имя мог придумать кто угодно (сканер CT-логов
+	// дописывает www. к каждому выпущенному имени, и так по кругу). Сертификат —
+	// только по маршруту, а маршруты Caddy выпускает сам, без этого вопроса.
+	if a.net.WildcardHere(r.Context(), domain) {
+		a.tlsAsk.remember(domain, false, true, "wildcard")
+		a.state.NoteAsk(domain, false, true)
+		slog.Warn("отказ в сертификате: имя под wildcard, маршрута нет", "domain", domain)
+		respondAsk(w, false)
+		return
+	}
 	if a.tlsAsk.overLimit() {
 		slog.Warn("отказ в сертификате: лимит новых доменов в час", "domain", domain)
 		a.state.NoteAsk(domain, false, false)

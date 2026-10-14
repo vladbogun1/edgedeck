@@ -72,6 +72,26 @@ func newTrustStore(dataDir, edgeDir string) *trustStore {
 	return t
 }
 
+// wildcardDNS — публичные сервисы, где любое имя с адресом внутри резолвится в
+// этот адрес: pivonia.150-136-40-217.sslip.io → 150.136.40.217. Такое имя никто
+// не покупал и не заводил, поэтому «зона» у него — само имя: своё только то, что
+// стоит в маршрутах или одобрено руками. Иначе соседние www.www.pivonia… тоже
+// «свои», и сканер CT-логов раскручивает петлю сертификатов (октябрь 2026, s3).
+var wildcardDNS = []string{
+	"sslip.io", "nip.io", "xip.io", "nip.direct", "traefik.me",
+	"localtest.me", "lvh.me", "vcap.me", "lacolhost.com",
+}
+
+// isWildcardDNS — имя из такого сервиса (но не сам сервис).
+func isWildcardDNS(host string) bool {
+	for _, s := range wildcardDNS {
+		if strings.HasSuffix(host, "."+s) {
+			return true
+		}
+	}
+	return false
+}
+
 // zoneOf — зона домена: «www.mail.foo.kozow.com» → «foo.kozow.com» (kozow.com
 // в Public Suffix List как публичный DDNS), «app.demo.chisetup.com.ua» →
 // «chisetup.com.ua». Для IP и внутренних имён — пусто.
@@ -83,6 +103,9 @@ func zoneOf(host string) string {
 	host = strings.TrimPrefix(host, "*.")
 	if host == "" || net.ParseIP(strings.Trim(host, "[]")) != nil || !strings.Contains(host, ".") {
 		return ""
+	}
+	if isWildcardDNS(host) {
+		return host
 	}
 	z, err := publicsuffix.EffectiveTLDPlusOne(host)
 	if err != nil {

@@ -7,6 +7,8 @@ package netcheck
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net"
@@ -122,6 +124,40 @@ func (c *Checker) CheckDomain(ctx context.Context, domain string) DomainCheck {
 	out.Message = "домен смотрит на " + strings.Join(addrs, ", ") + ", а этот сервер — " + serverIP +
 		". Пока A-запись не переедет, сертификат выпустить нельзя"
 	return out
+}
+
+// WildcardHere — отвечает ли на наш адрес и соседнее имя, которого никто не
+// заводил (случайная метка на месте первой). Если да, A-запись домена ничего не
+// доказывает: её синтезирует wildcard (*.зона или сервис вроде sslip.io), и
+// сканер может придумать сколько угодно таких имён. Именно так возникает петля
+// «выпустили сертификат → имя попало в CT-логи → сканер пробует www.<имя> →
+// выпустили ещё один». Ошибка резолва — «нет», зона без wildcard так и выглядит.
+func (c *Checker) WildcardHere(ctx context.Context, domain string) bool {
+	domain = strings.Trim(strings.ToLower(domain), ".")
+	i := strings.IndexByte(domain, '.')
+	if i < 0 || !strings.Contains(domain[i+1:], ".") {
+		return false // вершина зоны: соседа не придумать
+	}
+	serverIP, err := c.PublicIP(ctx)
+	if err != nil {
+		return false
+	}
+	var rnd [5]byte
+	_, _ = rand.Read(rnd[:])
+	probe := "edgedeck-probe-" + hex.EncodeToString(rnd[:]) + domain[i:]
+
+	lookupCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	addrs, err := c.resolver.LookupHost(lookupCtx, probe)
+	if err != nil {
+		return false
+	}
+	for _, a := range addrs {
+		if a == serverIP {
+			return true
+		}
+	}
+	return false
 }
 
 // ProbeResult — результат стука в цель из сети edge.
